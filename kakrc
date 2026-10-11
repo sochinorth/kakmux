@@ -1174,10 +1174,43 @@ define-command -hidden -params ..1 clipboard-yank %{
 	}
 }
 # clipboard-paste KEYS: KEYS (p, P or R) with the clipboard as the register.
-# (%sh{} drops one final newline, hence the echo: a copied line stays one.)
+# With several selections and as many lines in the clipboard (a final
+# newline aside), one line each, as clipboard-yank copied them; else all of
+# it for each. (The text is kept whole, final newlines and all: a copied
+# line stays one.)
 define-command -hidden -params 1 clipboard-paste %{
 	evaluate-commands -save-regs c %{
-		set-register c %sh{ eval "$kak_opt_clipboard_paste" 2>/dev/null; echo }
+		evaluate-commands %sh{
+			double() {
+				r= rest=$2
+				while :; do
+					case $rest in
+					*"$1"*) r="$r${rest%%"$1"*}$1$1" rest=${rest#*"$1"} ;;
+					*) r=$r$rest; return ;;
+					esac
+				done
+			}
+			text=$(eval "$kak_opt_clipboard_paste" 2>/dev/null; echo .); text=${text%.}
+			nl='
+'
+			if [ "$kak_selection_count" -gt 1 ]; then
+				body=${text%"$nl"} n=1 left=$body
+				while :; do
+					case $left in *"$nl"*) n=$((n + 1)) left=${left#*"$nl"} ;; *) break ;; esac
+				done
+				if [ "$n" -eq "$kak_selection_count" ]; then
+					regs= left=$body
+					while :; do
+						double "'" "${left%%"$nl"*}"; regs="$regs '$r'"
+						case $left in *"$nl"*) left=${left#*"$nl"} ;; *) break ;; esac
+					done
+					echo "set-register c$regs"
+					exit
+				fi
+			fi
+			double "'" "$text"
+			printf "set-register c '%s'\n" "$r"
+		}
 		execute-keys """c%arg{1}"
 	}
 }
