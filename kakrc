@@ -247,9 +247,32 @@ alias global x!   write-quit!
 declare-option str-list statusline_faces StatusLine StatusLineMode StatusLineInfo StatusLineValue StatusCursor StatusLineError StatusLineWarning
 declare-option -hidden str-list unfocused_clients
 
-# faces live per window (client + buffer), so reapply on every buffer switch
+# faces live per window (client + buffer), so reapply on every buffer switch.
+# Without a shell when there's nothing to do: the client isn't unfocused
+# (removing the unfocused ones from it leaves one name: statusline-one takes
+# one argument) and its window isn't dimmed, or the other way round.
+declare-option -hidden bool statusline_dimmed false
+declare-option -hidden str-list statusline_cmp
+define-command -hidden -params 1 statusline-one nop
+define-command -hidden -params 0 statusline-none nop
+define-command -hidden statusline-dimmed-false nop
+define-command -hidden statusline-dimmed-true-unfocused nop
 define-command -hidden statusline-apply-focus %{
-	evaluate-commands %sh{
+	try %{
+		set-option window statusline_cmp %val{client}
+		set-option -remove window statusline_cmp %opt{unfocused_clients}
+		try %{
+			evaluate-commands -verbatim statusline-one %opt{statusline_cmp}
+			evaluate-commands "statusline-dimmed-%opt{statusline_dimmed}"
+		} catch %{
+			# or unfocused, dimmed already, and no picker popup of its own
+			evaluate-commands -verbatim statusline-none %opt{statusline_cmp}
+			evaluate-commands "statusline-dimmed-%opt{statusline_dimmed}-unfocused"
+			set-option window statusline_cmp %val{client}
+			set-option -remove window statusline_cmp %opt{picker_clients}
+			evaluate-commands -verbatim statusline-one %opt{statusline_cmp}
+		}
+	} catch %{ evaluate-commands %sh{
 		eval set -- "$kak_quoted_opt_unfocused_clients"
 		dim=; for c; do [ "$c" = "$kak_client" ] && dim=1; done
 		# its own picker popup having the focus doesn't count
@@ -263,7 +286,9 @@ define-command -hidden statusline-apply-focus %{
 				echo "try %{ unset-face window $f }"
 			fi
 		done
-	}
+		if [ -n "$dim" ]; then echo 'set-option window statusline_dimmed true'
+		else echo 'set-option window statusline_dimmed false'; fi
+	} }
 }
 hook global FocusOut .* %{
 	set-option -remove global unfocused_clients %val{client}
@@ -1187,8 +1212,11 @@ map global insert <s-left>  '<a-;>H'
 # Only under kakmux: in any other tmux the status line is the user's own.
 
 declare-option -hidden str-list bufferline_bufs
-# last "pane|line" sent, to skip the tmux call when nothing changed
-declare-option -hidden str bufferline_last
+# what each pane was last sent for, "pane|buffer|styles|buffers": the same
+# again skips the shell and the tmux call. Per pane, not per window: a window
+# comes back to a pane that has shown others since.
+declare-option -hidden str-list bufferline_sent
+declare-option -hidden str-list bufferline_key
 
 # Colours: the faces BufferLineActive and BufferLineInactive (which also fills
 # the rest of the line), or for colour schemes without them, MenuForeground
@@ -1248,18 +1276,32 @@ define-command -hidden bufferline-load-styles %{
 	}
 }
 
+# This runs whenever keys stop, so the check whether anything changed is
+# done without a shell: the key, less what was sent, is nothing (which
+# bufferline-none, taking no arguments, accepts) when it was sent already.
+define-command -hidden -params 0 bufferline-none nop
 define-command -hidden bufferline-refresh %{
 	set-option global bufferline_bufs
 	evaluate-commands -buffer * %{
 		set-option -add global bufferline_bufs "%val{modified}:%val{bufname}"
 	}
+	try %{
+		set-option global bufferline_key "%val{client_env_TMUX_PANE}|%val{bufname}|%opt{bufferline_active}|%opt{bufferline_inactive}|%opt{bufferline_bufs}"
+		set-option -remove global bufferline_key %opt{bufferline_sent}
+		evaluate-commands -verbatim bufferline-none %opt{bufferline_key}
+	} catch %{
+		bufferline-send
+	}
+}
+# (bufferline_key holds this pane's key)
+define-command -hidden bufferline-send %{
 	evaluate-commands %sh{
 		case ${kak_client_env_TMUX%%,*} in */kakmux-*) ;; *) exit 0 ;; esac
 		[ -n "$kak_client_env_TMUX_PANE" ] || exit 0
 		if [ -z "$kak_opt_bufferline_active" ]; then
 			echo 'bufferline-load-styles; bufferline-refresh'; exit 0
 		fi
-		# double C in S, in $r (all in the shell: this runs whenever keys stop)
+		# double C in S, in $r (all in the shell, no other processes)
 		double() {
 			r= rest=$2
 			while :; do
@@ -1283,31 +1325,58 @@ define-command -hidden bufferline-refresh %{
 			fi
 		done
 		[ $# -gt 1 ] || line=
-		[ "$kak_client_env_TMUX_PANE|$line" = "$kak_opt_bufferline_last" ] && exit 0
 		export TMUX="$kak_client_env_TMUX"
 		status=off; [ -n "$line" ] && status=on
 		tmux set-option -p -t "$kak_client_env_TMUX_PANE" @kak_bufferline "$line" \; \
 			set-option -t "$kak_client_env_TMUX_PANE" status-style "$kak_opt_bufferline_inactive" \; \
 			set-option -t "$kak_client_env_TMUX_PANE" status "$status" \
 			>/dev/null 2>&1
-		double "'" "$kak_client_env_TMUX_PANE|$line"
-		printf "set-option global bufferline_last '%s'\n" "$r"
+		# this pane's key replaces what it was sent before
+		eval set -- "$kak_quoted_opt_bufferline_sent"
+		sent=
+		for e; do
+			case $e in "$kak_client_env_TMUX_PANE|"*) continue ;; esac
+			double "'" "$e"; sent="$sent '$r'"
+		done
+		echo "set-option global bufferline_sent$sent"
+		echo 'set-option -add global bufferline_sent %opt{bufferline_key}'
 	}
 }
 
 # Idle hooks catch every change (new/closed buffer, switch, first edit, save)
-# once keys stop; FocusIn catches changes another client made. Only kakmux
-# clients' windows get them, so no other client starts a shell whenever keys
-# stop.
-hook global WinDisplay .* %{
+# once keys stop; FocusIn catches changes another client made. Only for
+# kakmux clients: kakmux_clients lists them (one shell as each connects), and
+# the check is without one (the client, less those, is nothing).
+declare-option -hidden str-list kakmux_clients
+declare-option -hidden str-list kakmux_cmp
+define-command -hidden -params 0 kakmux-none nop
+hook global ClientCreate .* %{
 	evaluate-commands %sh{
-		case ${kak_client_env_TMUX%%,*} in */kakmux-*) ;; *) exit ;; esac
-		echo 'remove-hooks window bufferline'
-		echo 'hook -group bufferline window NormalIdle .* bufferline-refresh'
-		echo 'hook -group bufferline window InsertIdle .* bufferline-refresh'
-		echo 'hook -group bufferline window FocusIn    .* bufferline-refresh'
+		case ${kak_client_env_TMUX%%,*} in */kakmux-*)
+			echo 'set-option -add global kakmux_clients %val{client}' ;;
+		esac
 	}
 }
+hook global ClientRenamed .* %{
+	evaluate-commands %sh{
+		printf "set-option -remove global kakmux_clients '%s'\n" "$(printf %s "${kak_hook_param%:*}" | sed "s/'/''/g")"
+		case ${kak_client_env_TMUX%%,*} in */kakmux-*)
+			echo 'set-option -add global kakmux_clients %val{client}' ;;
+		esac
+	}
+}
+hook global ClientClose .* %{ set-option -remove global kakmux_clients %val{hook_param} }
+define-command -hidden bufferline-idle %{
+	try %{
+		set-option window kakmux_cmp %val{client}
+		set-option -remove window kakmux_cmp %opt{kakmux_clients}
+		evaluate-commands -verbatim kakmux-none %opt{kakmux_cmp}
+		bufferline-refresh
+	}
+}
+hook global NormalIdle .* bufferline-idle
+hook global InsertIdle .* bufferline-idle
+hook global FocusIn    .* bufferline-idle
 
 # :kakmux moves this client into a kakmux: it opens a client on the same session
 # in a new, detached kakmux (its own tmux server, as each kakmux has), which
