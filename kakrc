@@ -1382,17 +1382,36 @@ define-command weight -params ..2 -docstring 'weight [-width|-height] [<w>]: set
 	}
 }
 
-# close every other split; with one left, the weights only name panes gone
+# close every other split: the window's other panes labelled with this
+# session (see pane-label below), not shells or other sessions' clients
+# sharing the window. With one pane left, the weights only name panes gone.
 define-command -hidden split-only %{
-	nop %sh{
+	evaluate-commands %sh{
+		if [ -z "$kak_client_env_TMUX" ] || [ -z "$kak_client_env_TMUX_PANE" ]; then
+			echo "fail 'split: needs tmux (:kakmux)'"; exit
+		fi
 		export TMUX="$kak_client_env_TMUX"
-		tmux kill-pane -a -t "$kak_client_env_TMUX_PANE" \; \
-			set-option -wu -t "$kak_client_env_TMUX_PANE" @kakmux_weights >/dev/null 2>&1
+		me=$kak_client_env_TMUX_PANE
+		tmux list-panes -t "$me" -F '#{pane_id} #{@kak_session}' 2>/dev/null |
+			while IFS=' ' read -r p s; do
+				[ "$p" != "$me" ] && [ "$s" = "$kak_session" ] && tmux kill-pane -t "$p"
+			done >/dev/null 2>&1
+		[ "$(tmux display-message -p -t "$me" '#{window_panes}' 2>/dev/null)" = 1 ] &&
+			tmux set-option -wu -t "$me" @kakmux_weights >/dev/null 2>&1
+		exit 0
 	}
 }
 
+# tmux-here ARGS: a tmux command on this client's tmux server (never the
+# default one, for a client outside tmux)
 define-command -hidden -params 1.. tmux-here %{
-	nop %sh{ TMUX="$kak_client_env_TMUX" tmux "$@" >/dev/null 2>&1 }
+	evaluate-commands %sh{
+		if [ -z "$kak_client_env_TMUX" ] || [ -z "$kak_client_env_TMUX_PANE" ]; then
+			echo "fail 'split: needs tmux (:kakmux)'"; exit
+		fi
+		TMUX="$kak_client_env_TMUX" tmux "$@" >/dev/null 2>&1
+		exit 0
+	}
 }
 # split-focus -L|-R|-U|-D: unlike tmux, don't wrap around at the edges. At
 # one, a tmux nested in another (kakmux, :kakmux) moves on there, by the same
