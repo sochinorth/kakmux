@@ -132,7 +132,7 @@ case $1 in
 		echo "change-border-label: buffers · $name has unsaved changes, alt-d discards them "
 		exit
 	fi
-	send "delete-buffer${force:+!} $(kq "$name")
+	send "delete-buffer${force:+!} -- $(kq "$name")
 evaluate-commands -client $client bufferline-refresh"
 	rm -f -- "${dir:?}/${n:?}" "${dir:?}/${n:?}.name" "${dir:?}/${n:?}.meta"
 	echo "change-border-label( buffers )+reload:'$self' --list '${dir:?}'"
@@ -164,7 +164,9 @@ c() { case $1 in rgb:*) v="#${1#rgb:}" ;; rgba:*) v=${1#rgba:}; v="#${v%??}" ;; 
 sgr() {
 	case $1 in
 	rgb:*|rgba:*)
-		h=${1#*:} r=${h%????} g=${h#??}; g=${g%??} b=${h#????}; b=${b%"${b#??}"}
+		# (rgba: the alpha dropped, as c does)
+		h=${1#*:}; case $1 in rgba:*) h=${h%??} ;; esac
+		r=${h%????} g=${h#??}; g=${g%??} b=${h#????}; b=${b%"${b#??}"}
 		v="${2}8;2;$((0x$r));$((0x$g));$((0x$b))" ;;
 	bright-*) ansi "${1#bright-}"; v=$(( ($2 == 3 ? 90 : 100) + v )) ;;
 	*) ansi "$1"; v=$2$v ;;
@@ -214,7 +216,7 @@ buffers)
 		--preview "bat --color=always --style=numbers --highlight-line {3} --file-name {4} '${dir:?}'/{1}" \
 		--preview-window 'right,60%,+{3}-/2'
 	items() { list_buffers; }
-	open() { IFS= read -r name < "${dir:?}/${1:?}.name"; echo "buffer $(kq "$name")"; } ;;
+	open() { IFS= read -r name < "${dir:?}/${1:?}.name"; echo "buffer -- $(kq "$name")"; } ;;
 files)
 	title=files
 	legend='enter:open ctrl-s:split-below ctrl-v/alt-v:split-right'
@@ -228,7 +230,7 @@ files)
 		fd --type f --strip-cwd-prefix --color never
 		fd --type f --hidden --exclude .git --strip-cwd-prefix --color never | grep -E '(^|/)\.'
 	}
-	open() { echo "edit $(kq "$1")"; } ;;
+	open() { echo "edit -- $(kq "$1")"; } ;;
 locations|grep|workspace-symbols|changed)
 	legend='enter:open ctrl-s:split-below ctrl-v/alt-v:split-right'
 	set -- \
@@ -267,11 +269,13 @@ locations|grep|workspace-symbols|changed)
 			echo "kak-picker: not in a git repository" >&2; exit 1; }
 		cd "$root" || exit
 		set -- "$@" --preview "'$self' --diff {1}" --preview-window 'right,60%'
-		# `XY path` (or `XY old -> new`): + new, - deleted, ~ changed
+		# `XY path`, NUL-ended (-z: paths as they are, not C-quoted), a
+		# rename's or copy's old path next: + new, - deleted, ~ changed.
+		# (Names with a newline in them aren't handled.)
 		items() {
-			git status --porcelain=v1 --untracked-files=all | while IFS= read -r l; do
+			git status --porcelain=v1 -z --untracked-files=all | tr '\0' '\n' | while IFS= read -r l; do
 				st=${l%"${l#??}"} path=${l#???}
-				case $path in *' -> '*) path=${path#* -> } ;; esac
+				case $st in R?|C?|?R|?C) IFS= read -r old ;; esac
 				case $st in
 				'??'|A*|?A) mark="$git_add+" ;;
 				D*|?D) mark="$git_del-" ;;
@@ -284,7 +288,7 @@ locations|grep|workspace-symbols|changed)
 	esac
 	open() {
 		file=${1%%"$tab"*} r=${1#*"$tab"} line=${r%%"$tab"*} r=${r#*"$tab"} col=${r%%"$tab"*}
-		echo "edit -existing $(kq "$file") $line $col"
+		echo "edit -existing -- $(kq "$file") $line $col"
 	} ;;
 *)
 	echo "kak-picker: unknown kind: $kind" >&2; exit 1 ;;

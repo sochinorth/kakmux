@@ -799,6 +799,8 @@ define-command global-search -docstring 'search the files under the cwd as you t
 }
 define-command changed-file-picker -docstring 'files changed since HEAD (git, picker)' %{
 	evaluate-commands %sh{
+		git rev-parse --show-toplevel >/dev/null 2>&1 ||
+			{ echo "fail 'changed files: not in a git repository'"; exit; }
 		dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-picker.XXXXXX") || exit
 		echo "picker-open changed '$dir'"
 	}
@@ -1005,9 +1007,10 @@ declare-option -hidden str surround_sh %{
 		"$lb"|"$rb") o=$lb c=$rb obj=$lb ;;
 		'<'|'>') o='<' c='>' obj='<lt>' ;;
 		'"'|"'"|'`') o=$k c=$k obj=$k ;;
-		# any other: a custom object, the character on each side
+		# any other: a custom object, the character on each side (regex
+		# characters escaped, and the comma that separates the two)
 		*) o=$k c=$k
-		   e=$k; case $e in '<') e='<lt>' ;; [][\\.*+?^$\|\(\)]) e="\\$e" ;; esac
+		   e=$k; case $e in '<') e='<lt>' ;; [][\\.*+?^$\|\(\),]) e="\\$e" ;; esac
 		   obj="c$e,$e<ret>" ;;
 		esac
 	}
@@ -1277,14 +1280,18 @@ define-command kakmux -docstring 'continue this session inside kakmux (tmux buff
 		esac
 		server=kakmux-$$
 		buf=$(printf %s "$kak_bufname" | sed "s/'/''/g")
-		init="buffer '$buf'; select $kak_selections_desc"
+		init="buffer -- '$buf'; select $kak_selections_desc"
+		# (the handoff is written first: the new client may quit this one,
+		# and so end the wrapper's kak, before tmux returns)
 		if [ -n "$kak_client_env_KAKMUX_HANDOFF" ]; then
 			printf %s "$server" > "$kak_client_env_KAKMUX_HANDOFF"
 			init="$init; evaluate-commands -client $kak_client quit"
 		fi
 		TMUX= tmux -L "$server" -f ~/.config/kak/kakmux.conf new-session -d -- \
-			kak -c "$kak_session" -e "$init" \
-			|| { echo "fail 'kakmux: tmux failed'"; exit; }
+			kak -c "$kak_session" -e "$init" || {
+			[ -z "$kak_client_env_KAKMUX_HANDOFF" ] || rm -f -- "$kak_client_env_KAKMUX_HANDOFF"
+			echo "fail 'kakmux: tmux failed'"; exit
+		}
 		# nested: at its edges, <c-w> moves on to this pane's neighbours
 		[ -z "$kak_client_env_TMUX" ] ||
 			TMUX= tmux -L "$server" set-option @outer_pane \
@@ -1464,9 +1471,9 @@ define-command -hidden -params 1..3 split-impl %{
 		*) echo "fail 'split: ratio must be 1 to 99'"; exit ;;
 		esac
 		if [ $# -ge 1 ]; then
-			init="edit $(kq "$1")"
+			init="edit -- $(kq "$1")"
 		else
-			init="buffer $(kq "$kak_bufname"); select $kak_selections_desc"
+			init="buffer -- $(kq "$kak_bufname"); select $kak_selections_desc"
 		fi
 		echo "split-with $dir $(kq "$init") $ratio"
 	}
