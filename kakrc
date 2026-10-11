@@ -820,7 +820,8 @@ map global user g ':changed-file-picker<ret>'           -docstring 'changed file
 # focus (a commit moves HEAD), so typing never waits on git.
 
 # buffer: whether it's a file in HEAD ('' not known yet, yes, no), its
-# repository and path there, and the timestamp the flags are for
+# repository and path there, and the timestamp of the latest run (the one
+# whose flags count)
 declare-option -hidden str git_gutter_state
 declare-option -hidden str git_gutter_root
 declare-option -hidden str git_gutter_path
@@ -857,37 +858,67 @@ define-command -hidden git-gutter-update %{
 	}
 }
 
+# the session's temp dir (made on first use, removed when it ends)
+declare-option -hidden str git_gutter_dir
+hook global KakEnd .* %{
+	nop %sh{ [ -n "$kak_opt_git_gutter_dir" ] && rm -rf -- "$kak_opt_git_gutter_dir" }
+}
+
 define-command -hidden git-gutter-run %{
 	set-option buffer git_gutter_seen %val{timestamp}
 	evaluate-commands %sh{
-		dir=${TMPDIR:-/tmp}/kak-git-gutter-$kak_session
-		mkdir -p "$dir" || exit
-		# one file per buffer; the buffer goes there now, the diff runs after
-		f=$dir/$(printf %s "$kak_buffile" | cksum | cut -d' ' -f1)
-		printf "evaluate-commands -no-hooks write -force '%s'\n" "$f.buf"
-		printf "git-gutter-diff '%s' %s\n" "$f" "$kak_timestamp"
+		dir=$kak_opt_git_gutter_dir
+		if [ -z "$dir" ] || [ ! -d "$dir" ]; then
+			dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-git-gutter.XXXXXX") || exit
+			printf "set-option global git_gutter_dir '%s'\n" "$(printf %s "$dir" | sed "s/'/''/g")"
+		fi
+		# files per buffer and run (runs can overlap); the buffer goes there
+		# now, the diff runs after
+		f=$dir/$(printf %s "$kak_buffile" | cksum | cut -d' ' -f1).$kak_timestamp.$$
+		printf "evaluate-commands -no-hooks write -force '%s'\n" "$(printf %s "$f.buf" | sed "s/'/''/g")"
+		printf "git-gutter-diff '%s' %s %s\n" "$(printf %s "$f" | sed "s/'/''/g")" "$kak_timestamp" "$kak_buf_line_count"
 	}
 }
-define-command -hidden -params 2 git-gutter-diff %{
+# git-gutter-diff FILES TIMESTAMP LINES: FILES.buf against HEAD
+define-command -hidden -params 3 git-gutter-diff %{
 	nop %sh{
 		(
-			f=$1 ts=$2
+			f=$1 ts=$2 lines=$3
+			trap 'rm -f -- "$f.base" "$f.buf"' EXIT
 			cd "$kak_opt_git_gutter_root" || exit
 			git show "HEAD:./$kak_opt_git_gutter_path" > "$f.base" 2>/dev/null || exit
-			flags=$(git diff --no-index --no-color -U0 -- "$f.base" "$f.buf" | awk '
+			# (no diff.external, and line ends as Kakoune's eolformat
+			# leaves them: CRLF files under core.autocrlf)
+			flags=$(git diff --no-index --no-ext-diff --no-color --ignore-cr-at-eol -U0 -- "$f.base" "$f.buf" |
+				awk -v lines="$lines" '
 				/^@@/ {
 					split($2, a, ","); split($3, b, ",")
 					from = a[2] == "" ? 1 : a[2]; to_line = substr(b[1], 2) + 0
 					to = b[2] == "" ? 1 : b[2]
-					if (to == 0) { l = to_line + 1; printf " %d|{GitGutterDelete}▔", l < 1 ? 1 : l; next }
+					# on the line after, or the last one for lines gone at the end
+					if (to == 0) {
+						l = to_line + 1; if (l > lines) l = lines; if (l < 1) l = 1
+						printf " %d|{GitGutterDelete}▔", l; next
+					}
 					for (i = 0; i < to; i++)
 						printf " %d|{%s}▍", to_line + i, i < from ? "GitGutterModify" : "GitGutterAdd"
 				}')
 			b=$(printf %s "$kak_buffile" | sed "s/'/''/g")
-			printf "evaluate-commands -buffer '%s' %%{ set-option buffer git_gutter_flags %s%s }\n" "$b" "$ts" "$flags" |
+			printf "evaluate-commands -buffer '%s' %%{ git-gutter-set %s%s }\n" "$b" "$ts" "$flags" |
 				kak -p "$kak_session"
 		) >/dev/null 2>&1 </dev/null &
 	}
+}
+# git-gutter-set TIMESTAMP FLAGS...: from the latest run only (a slower,
+# older one finishing later is dropped); git_gutter_seen less TIMESTAMP is
+# 0 for that one
+define-command -hidden -params 1.. git-gutter-set %{
+	set-option -remove buffer git_gutter_seen %arg{1}
+	try %{
+		evaluate-commands "git-gutter-same-%opt{git_gutter_seen}"
+		set-option buffer git_gutter_flags %arg{@}
+	}
+	set-option -add buffer git_gutter_seen %arg{1}
 }
 
 # per buffer when keys stop, if it changed since (no shell otherwise: the
