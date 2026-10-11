@@ -127,27 +127,67 @@ colorscheme onedark
 # No completion menu straight after entering insert mode, only once something
 # has been typed in it (<c-x> still asks for one). autocomplete can't do this:
 # insert mode reads it once, before its ModeChange hook runs. completers is
-# read each time, so it's emptied until the first character typed.
+# read each time, so it's emptied (in the window) until the first character
+# typed. Then the window's own value comes back, or if it had none, it's
+# unset again, so global and buffer ones (lsp-disable) still count after.
+# It had one if unsetting it changes what's in effect, compared without a
+# shell: what's left after removing one from the other must be nothing both
+# ways (insert-completers-none takes no arguments).
 declare-option -hidden str-list insert_completers
+declare-option -hidden bool insert_completers_own
+declare-option -hidden str-list insert_completers_diff
+define-command -hidden -params 0 insert-completers-none nop
+define-command -hidden insert-completers-own-true nop
 hook global ModeChange push:.*:insert %{
 	set-option window insert_completers %opt{completers}
+	unset-option window completers
+	set-option window insert_completers_own true
+	try %{
+		set-option window insert_completers_diff %opt{insert_completers}
+		set-option -remove window insert_completers_diff %opt{completers}
+		evaluate-commands -verbatim insert-completers-none %opt{insert_completers_diff}
+		set-option window insert_completers_diff %opt{completers}
+		set-option -remove window insert_completers_diff %opt{insert_completers}
+		evaluate-commands -verbatim insert-completers-none %opt{insert_completers_diff}
+		set-option window insert_completers_own false
+	}
 	set-option window completers
 	hook -once -group insert-completers window InsertChar .* insert-completers-restore
 	hook -once -group insert-completers window ModeChange pop:insert:.* insert-completers-restore
 }
 define-command -hidden insert-completers-restore %{
 	remove-hooks window insert-completers
-	set-option window completers %opt{insert_completers}
+	unset-option window completers
+	try %{
+		evaluate-commands "insert-completers-own-%opt{insert_completers_own}"
+		set-option window completers %opt{insert_completers}
+	}
 }
 
-# auto-save.focus-lost = true (needs a terminal that reports focus events).
-# A picker's tmux popup takes the focus too, but that isn't leaving the editor
-# (see picker_clients below).
+# auto-save.focus-lost = true (needs a terminal that reports focus events):
+# when the terminal is left. Under kakmux, moving between splits moves the
+# focus between clients too, so there tmux says when its terminal is left
+# (kakmux.conf's client-focus-out hook runs auto-save-all); elsewhere it's
+# kak's FocusOut. A picker's tmux popup takes the focus too, but that isn't
+# leaving the editor (see picker_clients below); under kakbr, moving to broot
+# is. A write that fails (read-only file, gone directory) says so: why in
+# *debug*, that it did in the focused client.
+define-command -hidden auto-save-all %{
+	try %{ write-all } catch %{
+		echo -debug "auto-save: %val{error}"
+		try %{
+			evaluate-commands -client %opt{focused_client} %{
+				echo -markup '{Error}auto-save failed (see *debug*)'
+			}
+		}
+	}
+}
 hook global FocusOut .* %{
 	evaluate-commands %sh{
+		case ${kak_client_env_TMUX%%,*} in */kakmux-*) exit ;; esac
 		eval set -- "$kak_quoted_opt_picker_clients"
 		for c; do [ "$c" = "$kak_client" ] && exit; done
-		echo 'try %{ write-all }'
+		echo auto-save-all
 	}
 }
 
@@ -239,13 +279,15 @@ hook global ClientClose .* %{ set-option -remove global unfocused_clients %val{h
 
 # Under kakmux every split is a client of the same session, so the default
 # status line's " - client@[session]" tail is just noise there: strip it from
-# whatever modelinefmt is in effect (a no-op once the format is customised).
-hook global WinDisplay .* %{
+# the global modelinefmt, once, when the first kakmux client connects (a
+# session in kakmux has only those). A no-op once the format is customised.
+hook -group modeline-kakmux global ClientCreate .* %{
 	evaluate-commands %sh{
 		case ${kak_client_env_TMUX%%,*} in */kakmux-*) ;; *) exit ;; esac
+		echo 'remove-hooks global modeline-kakmux'
 		fmt=$(printf %s "$kak_opt_modelinefmt" | sed 's/ - %val{client}@\[%val{session}\]$//')
 		[ "$fmt" = "$kak_opt_modelinefmt" ] && exit
-		printf "set-option window modelinefmt '%s'\n" "$(printf %s "$fmt" | sed "s/'/''/g")"
+		printf "set-option global modelinefmt '%s'\n" "$(printf %s "$fmt" | sed "s/'/''/g")"
 	}
 }
 
