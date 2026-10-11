@@ -1486,12 +1486,23 @@ map global goto p '<esc>:buffer-previous<ret>' -docstring 'previous buffer'
 
 # --- languages.toml ----------------------------------------------------------
 # indent = { tab-width = 4, unit = "\t" }; indentwidth 0 means indent with tabs.
-# Helix's "bash" is Kakoune's "sh".
+# Helix's "bash" is Kakoune's "sh". Undone when the filetype changes to one
+# not in the list: window hooks run after global ones, so an undo on any
+# change would also undo this hook's own work when going from one of these
+# to another (c to cpp). lang-indent-<filetype> exists for the ones listed.
+define-command -hidden lang-indent-c nop
+define-command -hidden lang-indent-cpp nop
+define-command -hidden lang-indent-sh nop
+define-command -hidden lang-indent-markdown nop
 hook global WinSetOption filetype=(c|cpp|sh|markdown) %{
 	set-option window tabstop 4
 	set-option window indentwidth 0
-	hook -once -always window WinSetOption filetype=.* %{
-		unset-option window tabstop
-		unset-option window indentwidth
+	remove-hooks window lang-indent
+	hook -always -group lang-indent window WinSetOption filetype=.* %{
+		try %{ evaluate-commands "lang-indent-%opt{filetype}" } catch %{
+			remove-hooks window lang-indent
+			unset-option window tabstop
+			unset-option window indentwidth
+		}
 	}
 }
