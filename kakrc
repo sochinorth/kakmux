@@ -381,7 +381,10 @@ try %{
 # asks it for the list :lsp-diagnostics shows, catching it before it opens
 # that buffer (lsp-show-goto-buffer, wrapped below), and keeps this file's
 # part in line_diags. The end-of-line messages are drawn here too, from
-# kak-lsp's, less the cursor line's when it has lines below.
+# kak-lsp's, less the cursor line's when it has lines below. Kakoune doesn't
+# wrap those (flag-lines -after): one longer than the room left, as after a
+# soft-wrapped line, is cut at the window's edge. Leaving them out on lines
+# that wrap would need each line's width on screen, so they stay.
 
 declare-option -docstring 'severities shown below the cursor''s line' \
 	str-list inline_diagnostics_severities error warning
@@ -714,9 +717,13 @@ define-command -hidden -params .. line-diags-draw %{
 			done
 			lead="$lead{Default}"; blanks $(($2 - at))
 		}
-		# text width: the window less the gutter (flags, line numbers, │)
+		# text width: the window less the gutter (diagnostic flags, line
+		# numbers, │, and the git gutter's column when it has any flags) and
+		# the end-of-line mark show-whitespaces draws after each line (these
+		# included: a line any wider wraps)
 		digits=${#kak_buf_line_count}; [ "$digits" -ge 2 ] || digits=2
-		width=$((kak_window_width - digits - 2))
+		width=$((kak_window_width - digits - 3))
+		case $kak_opt_git_gutter_flags in *' '*) width=$((width - 1)) ;; esac
 		# a line that wraps puts its columns elsewhere on screen: then just
 		# the messages, from the left
 		if [ "$kak_opt_line_diags_eolcol" -gt "$width" ]; then
