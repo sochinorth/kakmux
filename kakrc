@@ -310,24 +310,27 @@ try %{
 #         │     └─Use of undeclared identifier 'tmp'
 #         └─Use of undeclared identifier 'old'
 # kak-lsp only hands Kakoune each line's worst message, so whenever the
-# diagnostics change this asks it for the list :lsp-diagnostics shows,
-# catching it before it opens that buffer (lsp-show-goto-buffer, wrapped
-# below), and keeps this file's part in line_diags. The end-of-line messages
-# are drawn here too, from kak-lsp's, less the cursor line's when it has
-# lines below.
+# diagnostics change (or, for a buffer not shown then, once it is) this
+# asks it for the list :lsp-diagnostics shows, catching it before it opens
+# that buffer (lsp-show-goto-buffer, wrapped below), and keeps this file's
+# part in line_diags. The end-of-line messages are drawn here too, from
+# kak-lsp's, less the cursor line's when it has lines below.
 
 declare-option -docstring 'severities shown below the cursor''s line' \
 	str-list inline_diagnostics_severities error warning
-# buffer: "line|column|severity|message" (byte column, as Kakoune counts)
+# buffer: "line|column|severity|message" (byte column, as Kakoune counts),
+# and whether that's behind kak-lsp's (stale, or '')
 declare-option -hidden str-list line_diags
 declare-option -hidden int line_diags_n 0
-# window: what's drawn, whether lines below are, for which cursor line,
-# and a list asked for (see lsp-show-goto-buffer)
+declare-option -hidden str line_diags_state
+# window: what's drawn, whether lines below are, for which cursor line
 declare-option -hidden range-specs line_diags_view
 declare-option -hidden line-specs line_diags_eol
 declare-option -hidden int line_diags_drawn 0
 declare-option -hidden int line_diags_seen 0
-declare-option -hidden bool line_diags_pending false
+# the lists asked for and not back yet, as "client=bufname", one per list:
+# kak-lsp answers in the client that asked, whatever buffer it shows by then
+declare-option -hidden str-list line_diags_pending
 declare-option -hidden str-list line_diags_dcols
 declare-option -hidden int line_diags_eolcol
 add-highlighter global/line-diags replace-ranges line_diags_view
@@ -339,9 +342,11 @@ add-highlighter global/line-diags-eol flag-lines -after Default line_diags_eol
 declare-option -hidden str lsp_diag_warnings
 declare-option -hidden str lsp_diag_errors
 
-# kak-lsp publishes into the buffer: the counts for the modeline, and each
-# client showing it asks for the list
+# kak-lsp publishes into the buffer: the counts for the modeline, and the
+# list is due. Each client showing it asks for it now; one that shows it
+# later does then (WinDisplay, below).
 hook global BufSetOption lsp_inlay_diagnostics=.* %{
+	set-option buffer line_diags_state stale
 	evaluate-commands %sh{
 		w=$kak_opt_lsp_diagnostic_warning_count e=$kak_opt_lsp_diagnostic_error_count
 		[ "${w:-0}" -gt 0 ] && w=" ● $w" || w=
@@ -356,29 +361,78 @@ hook global BufSetOption lsp_inlay_diagnostics=.* %{
 				esac
 			done
 		}
-		double "'" "$kak_bufname"; b=$r
 		eval set -- "$kak_quoted_client_list"
 		for c; do
 			double "'" "$c"
-			printf "evaluate-commands -client '%s' %%{ line-diags-request-for '%s' }\n" "$r" "$b"
+			printf "evaluate-commands -client '%s' line-diags-request\n" "$r"
 		done
 	}
 }
-define-command -hidden -params 1 line-diags-request-for %{
+# in a client: ask for the list if its buffer's is stale (whichever buffer
+# that is: only one just published, or one never asked for, is). No shell.
+define-command -hidden line-diags-stale-stale nop
+define-command -hidden line-diags-request %{
+	try %{
+		evaluate-commands "line-diags-stale-%opt{line_diags_state}"
+		set-option -add global line_diags_pending "%val{client}=%val{bufname}"
+		try %{ lsp-diagnostics } catch %{
+			set-option -remove global line_diags_pending "%val{client}=%val{bufname}"
+			set-option buffer line_diags_state ''
+		}
+	}
+}
+hook global WinDisplay .* line-diags-request
+# a client gone, its lists will never come (nor the pickers', below)
+hook global ClientClose .* %{
 	evaluate-commands %sh{
-		[ "$1" = "$kak_bufname" ] && echo 'set-option window line_diags_pending true; lsp-diagnostics'
+		eval set -- "$kak_quoted_opt_line_diags_pending" "$kak_quoted_opt_picker_only"
+		for e; do
+			case $e in "$kak_hook_param="*)
+				e=$(printf %s "$e" | sed "s/'/''/g")
+				echo "set-option -remove global line_diags_pending '$e'; set-option -remove global picker_only '$e'" ;;
+			esac
+		done
 	}
 }
 
 # Where every kak-lsp list ends up (references, symbols, diagnostics, calls:
-# `path:line:column:text` lines): the list asked for above is caught; one a
-# workspace symbol picker asked for goes to it; the rest open in a picker
-# (with tmux; else in kak-lsp's buffer, as before).
+# `path:line:column:text` lines): a list asked for above is caught, or
+# dropped if this client has moved to another buffer since (that one stays
+# stale, so asks again when shown); one a workspace symbol picker asked for
+# goes to it; the rest open in a picker (with tmux; else in kak-lsp's
+# buffer, as before).
 define-command -override -hidden lsp-show-goto-buffer -params 4..5 %{
 	evaluate-commands %sh{
-		if [ "$1" = '*diagnostics*' ] && [ "$kak_opt_line_diags_pending" = true ]; then
-			echo 'set-option window line_diags_pending false; line-diags-capture %arg{3} %arg{4}'
-		elif [ -n "$kak_opt_picker_wsym_out" ]; then
+		double() {
+			r= rest=$2
+			while :; do
+				case $rest in
+				*"$1"*) r="$r${rest%%"$1"*}$1$1" rest=${rest#*"$1"} ;;
+				*) r=$r$rest; return ;;
+				esac
+			done
+		}
+		title=$1
+		if [ "$title" = '*diagnostics*' ] && [ -n "$kak_opt_line_diags_pending" ]; then
+			# take off one entry: this buffer's, else any of this client's
+			eval set -- "$kak_quoted_opt_line_diags_pending"
+			mine=$kak_client=$kak_bufname take=
+			for e; do [ "$e" = "$mine" ] && take=$e; done
+			if [ -z "$take" ]; then
+				for e; do case $e in "$kak_client="*) take=$e; break ;; esac; done
+			fi
+			if [ -n "$take" ]; then
+				keep= done=
+				for e; do
+					if [ -z "$done" ] && [ "$e" = "$take" ]; then done=1; continue; fi
+					double "'" "$e"; keep="$keep '$r'"
+				done
+				echo "set-option global line_diags_pending$keep"
+				[ "$take" = "$mine" ] && echo 'line-diags-capture %arg{3} %arg{4}'
+				exit
+			fi
+		fi
+		if [ "$title" = '*symbols*' ] && [ -n "$kak_opt_picker_wsym_out" ]; then
 			echo 'picker-wsym-deliver %arg{3} %arg{4}'
 		elif [ -n "$kak_client_env_TMUX" ]; then
 			echo 'picker-locations %arg{1} %arg{2} %arg{3} %arg{4}'
@@ -387,10 +441,19 @@ define-command -override -hidden lsp-show-goto-buffer -params 4..5 %{
 		fi
 	}
 }
-# kak-lsp's lsp-show-document-symbol, less pointing the buffer's `path` at
-# the project (for gf in its buffer, which the picker has no use for)
+# kak-lsp's lsp-show-document-symbol: its additions to the goto buffer
+# (`path` for gf on the file name, and the file <ret> jumps into) only when
+# that's what was shown, not the picker (they'd land on the file's buffer)
+define-command -hidden line-diags-shown-lsp-document-symbol nop
 define-command -override -hidden lsp-show-document-symbol -params 4 %{
 	lsp-show-goto-buffer *goto* lsp-document-symbol %arg{1} %arg{3} %arg{4}
+	evaluate-commands -try-client %opt[toolsclient] %{
+		try %{
+			evaluate-commands "line-diags-shown-%opt{filetype}"
+			set-option -add buffer path %arg{1}
+			set-option buffer lsp_buffile %arg{2}
+		}
+	}
 }
 # kak-lsp's lsp-show-goto-buffer (21.0.2), as it was
 define-command -hidden -params 4..5 line-diags-goto-buffer %{
@@ -413,6 +476,7 @@ define-command -hidden -params 4..5 line-diags-goto-buffer %{
 # line-diags-capture ROOT LIST: keep this file's lines of the list, which
 # read `path:line:column: [severity][...] message` (path from ROOT on)
 define-command -hidden -params 2 line-diags-capture %{
+	set-option buffer line_diags_state ''
 	evaluate-commands %sh{
 		double() {
 			r= rest=$2
@@ -667,7 +731,10 @@ map global user t ':enter-user-mode tree-sitter<ret>' -docstring 'tree-sitter mo
 # `path:line:column:text` lines (bin/kak-picker's "locations").
 
 # picker-locations BUFNAME FILETYPE ROOT LIST: kak-lsp's goto buffer arguments
-declare-option -hidden bool picker_only_this_file false
+# picker_only: "client=file" when the client's last diagnostics-picker was
+# for just that file, until its diagnostics picker opens (wherever the
+# client is by then)
+declare-option -hidden str-list picker_only
 define-command -hidden -params 4 picker-locations %{
 	evaluate-commands %sh{
 		dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-picker.XXXXXX") || exit
@@ -675,17 +742,35 @@ define-command -hidden -params 4 picker-locations %{
 		echo "echo -to-file '$dir/root' %arg{3}"
 		echo "echo -to-file '$dir/type' %arg{2}"
 		echo "echo -to-file '$dir/title' %arg{1}"
-		if [ "$kak_opt_picker_only_this_file" = true ]; then
-			echo "echo -to-file '$dir/only' %val{buffile}"
-			echo 'set-option window picker_only_this_file false'
+		if [ "$2" = lsp-diagnostics ] && [ -n "$kak_opt_picker_only" ]; then
+			eval set -- "$kak_quoted_opt_picker_only"
+			for e; do
+				[ "${e#"$kak_client="}" != "$e" ] || continue
+				printf %s "${e#"$kak_client="}" > "$dir/only"
+				printf "set-option -remove global picker_only '%s'\n" "$(printf %s "$e" | sed "s/'/''/g")"
+			done
 		fi
 		echo "picker-open locations '$dir'"
 	}
 }
 
 define-command diagnostics-picker -params ..1 -docstring 'diagnostics-picker [-workspace]: this file''s diagnostics (or every file''s) in a picker' %{
-	evaluate-commands %sh{ [ "$1" = -workspace ] || echo 'set-option window picker_only_this_file true' }
-	lsp-diagnostics
+	# replaces what an earlier one left (one kak-lsp never answered); no
+	# picker outside tmux: kak-lsp's buffer, with every file's
+	evaluate-commands %sh{
+		scope=$1
+		eval set -- "$kak_quoted_opt_picker_only"
+		for e; do
+			[ "${e#"$kak_client="}" != "$e" ] || continue
+			printf "set-option -remove global picker_only '%s'\n" "$(printf %s "$e" | sed "s/'/''/g")"
+		done
+		[ "$scope" = -workspace ] || [ -z "$kak_client_env_TMUX" ] ||
+			echo 'set-option -add global picker_only "%val{client}=%val{buffile}"'
+	}
+	try %{ lsp-diagnostics } catch %{
+		set-option -remove global picker_only "%val{client}=%val{buffile}"
+		fail %val{error}
+	}
 }
 define-command symbol-picker -docstring "this file's symbols in a picker" %{
 	lsp-document-symbol
