@@ -120,9 +120,11 @@ colorscheme onedark
 # --- [editor] ----------------------------------------------------------------
 # bufferline = "multiple": drawn in tmux's status line, see the bufferline
 # section below and ~/.local/bin/kakmux.
-# preview-completion-insert = false: nothing to set. Only <c-n>/<c-p> pick a
-# candidate (Tab, Enter and arrows never do), and picking one does put it in
-# the text straight away. Ignore the menu and nothing gets inserted.
+# preview-completion-insert = false: can't be had. False is Helix only
+# showing the candidate picked in the menu until it's accepted; Kakoune's
+# <c-n>/<c-p>, the only keys that pick one (Tab, Enter and arrows never do),
+# put it in the text straight away, as Helix's true does. Ignore the menu
+# and nothing gets inserted.
 
 # No completion menu straight after entering insert mode, only once something
 # has been typed in it (<c-x> still asks for one). autocomplete can't do this:
@@ -191,8 +193,10 @@ hook global FocusOut .* %{
 	}
 }
 
-# indent-guides.render = true: no indent guides. Indentation here is tabs (see
-# below), so drawing tabs as a bar gives much the same picture.
+# indent-guides.render = true: no indent guides. Tabs are drawn as a bar
+# instead, which gives much the same picture where indentation is tabs (C,
+# C++, sh, markdown: see languages.toml below); indentation in spaces gets
+# no guides.
 add-highlighter global/ show-whitespaces -tab '│' -tabpad ' ' -spc ' ' -lf ' ' -nbsp '⍽'
 
 # soft-wrap.enable = true
@@ -421,7 +425,7 @@ hook global BufSetOption lsp_inlay_diagnostics=.* %{
 		w=$kak_opt_lsp_diagnostic_warning_count e=$kak_opt_lsp_diagnostic_error_count
 		[ "${w:-0}" -gt 0 ] && w=" ● $w" || w=
 		[ "${e:-0}" -gt 0 ] && e=" ● $e" || e=
-		echo "set-option buffer lsp_diag_warnings '$w'; set-option buffer lsp_diag_errors '$e'"
+		printf '%s\n' "set-option buffer lsp_diag_warnings '$w'; set-option buffer lsp_diag_errors '$e'"
 		double() {
 			r= rest=$2
 			while :; do
@@ -459,7 +463,7 @@ hook global ClientClose .* %{
 		for e; do
 			case $e in "$kak_hook_param="*)
 				e=$(printf %s "$e" | sed "s/'/''/g")
-				echo "set-option -remove global line_diags_pending '$e'; set-option -remove global picker_only '$e'" ;;
+				printf '%s\n' "set-option -remove global line_diags_pending '$e'; set-option -remove global picker_only '$e'" ;;
 			esac
 		done
 	}
@@ -497,7 +501,7 @@ define-command -override -hidden lsp-show-goto-buffer -params 4..5 %{
 					if [ -z "$done" ] && [ "$e" = "$take" ]; then done=1; continue; fi
 					double "'" "$e"; keep="$keep '$r'"
 				done
-				echo "set-option global line_diags_pending$keep"
+				printf '%s\n' "set-option global line_diags_pending$keep"
 				[ "$take" = "$mine" ] && echo 'line-diags-capture %arg{3} %arg{4}'
 				exit
 			fi
@@ -582,7 +586,7 @@ define-command -hidden -params 2 line-diags-capture %{
 		done <<-EOF
 			$2
 		EOF
-		echo "set-option buffer line_diags $out"
+		printf '%s\n' "set-option buffer line_diags $out"
 		echo "set-option buffer line_diags_n $n"
 		echo 'line-diags-render'
 	}
@@ -635,7 +639,7 @@ define-command -hidden line-diags-render %{
 		# the whole line: the lines below hang from its end (and its width
 		# says whether it wraps)
 		echo "select $cur.1,$cur.1; execute-keys x; set-option window line_diags_eolcol %val{cursor_display_column}"
-		echo "line-diags-draw$args"
+		printf '%s\n' "line-diags-draw$args"
 	}
 }
 
@@ -694,7 +698,7 @@ define-command -hidden -params .. line-diags-draw %{
 				[ "$n" -gt 0 ] && [ "${e%%|*}" = "$cur" ] && continue
 				double "'" "$e"; eol="$eol '$r'"
 			done
-			echo "set-option window line_diags_eol $eol"
+			printf '%s\n' "set-option window line_diags_eol $eol"
 		fi
 		if [ "$n" -eq 0 ]; then
 			echo 'set-option window line_diags_view %val{timestamp}'
@@ -1094,7 +1098,7 @@ declare-option -hidden str surround_sh %{
 define-command -hidden surround-add %{
 	on-key -mode-name surround %{ evaluate-commands %sh{
 		eval "$kak_opt_surround_sh"; surround_char "$kak_key"
-		echo "surround-insert $(kq "$o") $(kq "$c")"
+		printf '%s\n' "surround-insert $(kq "$o") $(kq "$c")"
 	} }
 }
 define-command -hidden -params 2 surround-insert %{
@@ -1109,13 +1113,13 @@ define-command -hidden surround-delete %{
 	on-key -mode-name surround %{ evaluate-commands %sh{
 		eval "$kak_opt_surround_sh"; surround_char "$kak_key"
 		# around it, its first and last characters, gone
-		echo "execute-keys $(kq "<a-a>$obj<a-S>d")"
+		printf '%s\n' "execute-keys $(kq "<a-a>$obj<a-S>d")"
 	} }
 }
 define-command -hidden surround-replace %{
 	on-key -mode-name surround %{ evaluate-commands %sh{
 		eval "$kak_opt_surround_sh"; surround_char "$kak_key"
-		echo "execute-keys $(kq "<a-a>$obj<a-S>")"
+		printf '%s\n' "execute-keys $(kq "<a-a>$obj<a-S>")"
 		echo 'surround-replace-with'
 	} }
 }
@@ -1127,7 +1131,7 @@ define-command -hidden surround-replace-with %{
 		while [ "$i" -lt "$kak_selection_count" ]; do
 			pairs="$pairs $(kq "$o") $(kq "$c")"; i=$((i + 2))
 		done
-		echo "surround-put$pairs"
+		printf '%s\n' "surround-put$pairs"
 	} }
 }
 # surround-put CHARACTER...: one per selection, in their place
@@ -1211,7 +1215,7 @@ define-command -hidden -params 1 clipboard-paste %{
 						double "'" "${left%%"$nl"*}"; regs="$regs '$r'"
 						case $left in *"$nl"*) left=${left#*"$nl"} ;; *) break ;; esac
 					done
-					echo "set-register c$regs"
+					printf '%s\n' "set-register c$regs"
 					exit
 				fi
 			fi
@@ -1237,9 +1241,10 @@ map global normal <c-left>  b
 map global normal <s-right> L
 map global normal <s-left>  H
 
-# Insert mode: <a-;> runs one normal-mode command. Typing in insert mode goes
-# before the selection rather than replacing it, so S-left/S-right only
-# matter once you leave insert mode.
+# Insert mode: <a-;> runs one normal-mode command. What's typed in insert
+# mode never replaces the selection (after i it goes in before it, after a
+# after it, and c has deleted it already), so S-left/S-right only matter
+# once you leave insert mode.
 map global insert <c-right> '<a-;>w<a-;>l'
 map global insert <c-left>  '<a-;>b<a-;>;'
 map global insert <s-right> '<a-;>L'
@@ -1378,7 +1383,7 @@ define-command -hidden bufferline-send %{
 			case $e in "$kak_client_env_TMUX_PANE|"*) continue ;; esac
 			double "'" "$e"; sent="$sent '$r'"
 		done
-		echo "set-option global bufferline_sent$sent"
+		printf '%s\n' "set-option global bufferline_sent$sent"
 		echo 'set-option -add global bufferline_sent %opt{bufferline_key}'
 	}
 }
@@ -1626,7 +1631,7 @@ define-command -hidden -params 1..3 split-impl %{
 		else
 			init="buffer -- $(kq "$kak_bufname"); select $kak_selections_desc"
 		fi
-		echo "split-with $dir $(kq "$init") $ratio"
+		printf '%s\n' "split-with $dir $(kq "$init") $ratio"
 	}
 }
 define-command vsplit -params ..2 -docstring 'vsplit [<ratio>] [<file>]: split side by side, this one <ratio>% (1-99) of the pair' %{ split-impl -h %arg{@} }

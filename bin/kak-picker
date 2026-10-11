@@ -216,7 +216,7 @@ buffers)
 		--preview "bat --color=always --style=numbers --highlight-line {3} --file-name {4} '${dir:?}'/{1}" \
 		--preview-window 'right,60%,+{3}-/2'
 	items() { list_buffers; }
-	open() { IFS= read -r name < "${dir:?}/${1:?}.name"; echo "buffer -- $(kq "$name")"; } ;;
+	open() { IFS= read -r name < "${dir:?}/${1:?}.name"; printf '%s\n' "buffer -- $(kq "$name")"; } ;;
 files)
 	title=files
 	legend='enter:open ctrl-s:split-below ctrl-v/alt-v:split-right'
@@ -230,7 +230,7 @@ files)
 		fd --type f --strip-cwd-prefix --color never
 		fd --type f --hidden --exclude .git --strip-cwd-prefix --color never | grep -E '(^|/)\.'
 	}
-	open() { echo "edit -- $(kq "$1")"; } ;;
+	open() { printf '%s\n' "edit -- $(kq "$1")"; } ;;
 locations|grep|workspace-symbols|changed)
 	legend='enter:open ctrl-s:split-below ctrl-v/alt-v:split-right'
 	set -- \
@@ -288,7 +288,7 @@ locations|grep|workspace-symbols|changed)
 	esac
 	open() {
 		file=${1%%"$tab"*} r=${1#*"$tab"} line=${r%%"$tab"*} r=${r#*"$tab"} col=${r%%"$tab"*}
-		echo "edit -existing -- $(kq "$file") $line $col"
+		printf '%s\n' "edit -existing -- $(kq "$file") $line $col"
 	} ;;
 *)
 	echo "kak-picker: unknown kind: $kind" >&2; exit 1 ;;
