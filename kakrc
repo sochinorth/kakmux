@@ -1559,6 +1559,39 @@ define-command -override -hidden goto-file %{
 	execute-keys gf
 }
 
+# --- view mode (z, Z) ----------------------------------------------------------
+# Helix's z: a view menu, sticky as Z (until <esc>). Kakoune's v/V view mode
+# stays as it is. Kakoune's z/Z (restore/save selections, register ^) move
+# into it: zr and zs (<a-z>/<a-Z>, combining, keep their keys).
+try %{ declare-user-mode zview }
+map global normal z ':enter-user-mode zview<ret>'       -docstring 'view mode'
+map global normal Z ':enter-user-mode -lock zview<ret>' -docstring 'view mode (sticky)'
+map global zview z vc              -docstring 'center line vertically'
+map global zview c vc              -docstring 'center line vertically'
+map global zview t vt              -docstring 'line to top'
+map global zview b vb              -docstring 'line to bottom'
+map global zview m vm              -docstring 'center column horizontally'
+map global zview k vk              -docstring 'scroll up'
+map global zview j vj              -docstring 'scroll down'
+map global zview <up> vk           -docstring 'scroll up'
+map global zview <down> vj         -docstring 'scroll down'
+map global zview h vh              -docstring 'scroll left'
+map global zview l vl              -docstring 'scroll right'
+map global zview <c-b> <c-b>       -docstring 'page up'
+map global zview <c-f> <c-f>       -docstring 'page down'
+map global zview <pageup> <c-b>    -docstring 'page up'
+map global zview <pagedown> <c-f>  -docstring 'page down'
+map global zview <c-u> <c-u>       -docstring 'half page up'
+map global zview <c-d> <c-d>       -docstring 'half page down'
+map global zview <backspace> <c-u> -docstring 'half page up'
+map global zview <space> <c-d>     -docstring 'half page down'
+map global zview / /               -docstring 'search forward'
+map global zview ? <a-/>           -docstring 'search backward'
+map global zview n n               -docstring 'next match'
+map global zview N <a-n>           -docstring 'previous match'
+map global zview s Z               -docstring 'save selections (Kakoune''s Z)'
+map global zview r z               -docstring 'restore selections (Kakoune''s z)'
+
 # --- bufferline (tmux) --------------------------------------------------------
 # Kakoune can't draw a bufferline itself, so each client publishes its buffer
 # list to its tmux pane as @kak_bufferline, which kakmux.conf draws as the
