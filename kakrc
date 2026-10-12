@@ -1661,6 +1661,80 @@ define-command -override -hidden -params 1 git-hunk-goto %{
 	}
 }
 
+# --- insert mode ---------------------------------------------------------------
+# Helix's insert keys: <c-w> and <a-backspace> delete the word before the
+# cursor, <a-d> the one after, <c-u> back to the line's first non-blank (or
+# its start), <c-k> to its end, <c-h> <c-d> a character back/forward, <c-j> a
+# new line; at a line's edge the deleting ones join it with the next or
+# previous. Every selection, each on its own. Kakoune's <c-u> (start a new
+# undo step) moves to <c-s>, Helix's for that. <tab> and <s-tab> insert one
+# indent (indentwidth spaces up to the next stop, or a tab where indentwidth
+# is 0): Helix's insert_tab (its smart_tab jump out of the syntax node isn't
+# had). A literal tab is <c-v><tab>. Kakoune's <tab> never picks from the
+# completion menu (<c-n>/<c-p> do), so there's nothing to lose there.
+map global insert <c-w>         '<a-;>:insert-delete -word-before<ret>'
+map global insert <a-backspace> '<a-;>:insert-delete -word-before<ret>'
+map global insert <a-d>         '<a-;>:insert-delete -word-after<ret>'
+map global insert <c-u>         '<a-;>:insert-delete -line-before<ret>'
+map global insert <c-k>         '<a-;>:insert-delete -line-after<ret>'
+map global insert <c-h>         <backspace>
+map global insert <c-d>         <del>
+map global insert <c-j>         <ret>
+map global insert <c-s>         <c-u>
+map global insert <tab>         '<tab><a-;>:insert-indent-expand<ret>'
+map global insert <s-tab>       '<tab><a-;>:insert-indent-expand<ret>'
+# insert-delete -word-before|-word-after|-line-before|-line-after: from each
+# cursor (in insert mode, the character text goes in before)
+define-command -override -hidden -params 1 insert-delete %{
+	evaluate-commands -draft -itersel %{
+		execute-keys ';'
+		# (each a draft: a try that fails half way leaves the selection)
+		try %{
+			evaluate-commands "insert-delete%arg{1}"
+		} catch %{
+			# nothing on this line that way: the line break
+			try %{ evaluate-commands "insert-delete%arg{1}-join" }
+		}
+	}
+}
+define-command -override -hidden insert-delete-word-before %{
+	execute-keys -draft '<a-h>s(?:\w+\s*|[^\w\s]+\s*|\s+).\z<ret><a-:>H<a-d>'
+}
+define-command -override -hidden insert-delete-word-after %{
+	execute-keys -draft '<a-l>s\A(?:\w+\h*|[^\w\s]+\h*|\h+)<ret><a-d>'
+}
+define-command -override -hidden insert-delete-line-before %{
+	# from the first non-blank if the cursor is past it, else from the start
+	try %{
+		execute-keys -draft '<a-h>s\S.*.\z<ret><a-:>H<a-d>'
+	} catch %{
+		execute-keys -draft '<a-h>s\A.+.\z<ret><a-:>H<a-d>'
+	}
+}
+define-command -override -hidden insert-delete-line-after %{
+	execute-keys -draft '<a-l>s.+<ret><a-d>'
+}
+define-command -override -hidden insert-delete-word-before-join %{
+	execute-keys -draft '<a-k>^<ret>H<a-k>\A\n.\z<ret><a-:><a-;>;<a-d>'
+}
+define-command -override -hidden insert-delete-line-before-join %{
+	insert-delete-word-before-join
+}
+define-command -override -hidden insert-delete-word-after-join %{
+	execute-keys -draft '<a-k>\n<ret><a-d>'
+}
+define-command -override -hidden insert-delete-line-after-join %{
+	insert-delete-word-after-join
+}
+# the tab just typed before each cursor, as spaces up to the next multiple
+# of indentwidth (none for 0: a tab it stays)
+define-command -override -hidden insert-indent-expand-0 nop
+define-command -override -hidden insert-indent-expand %{
+	try %{ evaluate-commands "insert-indent-expand-%opt{indentwidth}" } catch %{
+		execute-keys -draft ";h%opt{indentwidth}@"
+	}
+}
+
 # --- bufferline (tmux) --------------------------------------------------------
 # Kakoune can't draw a bufferline itself, so each client publishes its buffer
 # list to its tmux pane as @kak_bufferline, which kakmux.conf draws as the
