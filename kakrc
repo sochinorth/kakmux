@@ -1592,6 +1592,75 @@ map global zview N <a-n>           -docstring 'previous match'
 map global zview s Z               -docstring 'save selections (Kakoune''s Z)'
 map global zview r z               -docstring 'restore selections (Kakoune''s z)'
 
+# --- [ and ] -------------------------------------------------------------------
+# Helix's unimpaired-style jumps, ]x to the next x, [x to the previous:
+# d diagnostic (D the last/first), g git change (G the last/first), f
+# function, t type, a argument, c comment, e entry, T test (tree-sitter,
+# needs a grammar), p paragraph, <space> a blank line below/above. Kakoune's
+# [ and ] (select to an object's start/end) move to [[ and ]] (then the
+# object key); { } <a-[> <a-]> are unchanged.
+# ]d uses kak-lsp's lsp-find-error: the diagnostic object (above) only works
+# from object mode, which a user mode's keys can't continue into. Its
+# --previous counts one under the cursor, hence a step left first. Both wrap
+# around at the ends, as Helix's do.
+try %{ declare-user-mode next }
+try %{ declare-user-mode prev }
+map global normal ] ':enter-user-mode next<ret>' -docstring 'next (Helix ])'
+map global normal [ ':enter-user-mode prev<ret>' -docstring 'previous (Helix [)'
+map global next ] ]  -docstring 'select to object end (Kakoune''s ])'
+map global prev [ [  -docstring 'select to object start (Kakoune''s [)'
+map global next d ':lsp-find-error error warning info hint<ret>'               -docstring 'diagnostic'
+map global prev d ';h:lsp-find-error --previous error warning info hint<ret>'  -docstring 'diagnostic'
+map global next D 'ge:lsp-find-error --previous error warning info hint<ret>'  -docstring 'last diagnostic'
+map global prev D 'gg:lsp-find-error error warning info hint<ret>'             -docstring 'first diagnostic'
+map global next g ':git-hunk-goto next<ret>'  -docstring 'git change'
+map global prev g ':git-hunk-goto prev<ret>'  -docstring 'git change'
+map global next G ':git-hunk-goto last<ret>'  -docstring 'last git change'
+map global prev G ':git-hunk-goto first<ret>' -docstring 'first git change'
+map global next f ':tree-sitter-text-objects function.around search_next<ret>'  -docstring 'function'
+map global prev f ':tree-sitter-text-objects function.around search_prev<ret>'  -docstring 'function'
+map global next t ':tree-sitter-text-objects class.around search_next<ret>'     -docstring 'type'
+map global prev t ':tree-sitter-text-objects class.around search_prev<ret>'     -docstring 'type'
+map global next a ':tree-sitter-text-objects parameter.around search_next<ret>' -docstring 'argument'
+map global prev a ':tree-sitter-text-objects parameter.around search_prev<ret>' -docstring 'argument'
+map global next c ':tree-sitter-text-objects comment.around search_next<ret>'   -docstring 'comment'
+map global prev c ':tree-sitter-text-objects comment.around search_prev<ret>'   -docstring 'comment'
+map global next e ':tree-sitter-text-objects entry.around search_next<ret>'     -docstring 'entry'
+map global prev e ':tree-sitter-text-objects entry.around search_prev<ret>'     -docstring 'entry'
+map global next T ':tree-sitter-text-objects test.around search_next<ret>'      -docstring 'test'
+map global prev T ':tree-sitter-text-objects test.around search_prev<ret>'      -docstring 'test'
+map global next p ]p      -docstring 'paragraph'
+map global prev p [p      -docstring 'paragraph'
+map global next <space> <a-o> -docstring 'add blank line below'
+map global prev <space> <a-O> -docstring 'add blank line above'
+# git-hunk-goto next|prev|first|last: select that change's lines (from the
+# git gutter's flags; the git change object, <a-i>g ]]g, finds them alike)
+define-command -override -hidden -params 1 git-hunk-goto %{
+	evaluate-commands %sh{
+		mode=$1
+		eval set -- "$kak_quoted_opt_git_gutter_flags"
+		[ $# -gt 0 ] && shift
+		# hunks: runs of consecutive lines, as start-end
+		cur=$kak_cursor_line hit= start= prev=
+		for e in "$@" ''; do
+			l=${e%%|*}
+			if [ -n "$start" ] && { [ -z "$l" ] || [ "$l" -ne $((prev + 1)) ]; }; then
+				case $mode in
+				next) [ "$start" -gt "$cur" ] && { hit="$start.1,$prev.1"; break; } ;;
+				prev) [ "$prev" -lt "$cur" ] && hit="$start.1,$prev.1" ;;
+				first) hit="$start.1,$prev.1"; break ;;
+				last) hit="$start.1,$prev.1" ;;
+				esac
+				start=
+			fi
+			[ -n "$l" ] || break
+			[ -n "$start" ] || start=$l
+			prev=$l
+		done
+		if [ -n "$hit" ]; then echo "select $hit; execute-keys x"; else echo "fail 'no more changes'"; fi
+	}
+}
+
 # --- bufferline (tmux) --------------------------------------------------------
 # Kakoune can't draw a bufferline itself, so each client publishes its buffer
 # list to its tmux pane as @kak_bufferline, which kakmux.conf draws as the
