@@ -1487,9 +1487,10 @@ map global object g '<a-;>git-hunk-object<ret>' -docstring 'git change'
 # --- match mode: brackets, surrounds ------------------------------------------
 # Helix's m: mm to the matching bracket (Kakoune's m; M, extending, is left
 # as it is), mi/ma select inside/around an object (<a-i>/<a-a>), and the
-# surrounds: ms( wraps the selections in ( ), mr([ turns the ( ) around them
-# into [ ], md( deletes them. A bracket and its closer are the same pair;
-# any other character pairs with itself.
+# surrounds: ms( wraps the selections in ( ), mr([ turns the ( ) around each
+# cursor into [ ], md( deletes them (so right after ms(, its own pair). A
+# bracket and its closer are the same pair; any other character pairs with
+# itself.
 try %{ declare-user-mode match }
 map global normal m ':enter-user-mode match<ret>' -docstring 'match mode'
 map global match m m                       -docstring 'goto matching bracket'
@@ -1528,6 +1529,19 @@ declare-option -hidden str surround_sh %{
 		esac
 	}
 	kq() { printf "'%s'" "$(printf %s "$1" | sed "s/'/''/g")"; }
+	# around: kak commands selecting the pair around each selection, from
+	# its cursor as Helix does (a selection that's a whole pair already, as
+	# ms leaves it, would otherwise get the one outside it). On a bracket
+	# the cursor picks that bracket's pair; a quote or other character
+	# can't say which side it's on, so a selection that starts and ends
+	# with it is taken as the pair itself.
+	around() {
+		if [ "$o" != "$c" ]; then
+			printf '%s\n' "execute-keys $(kq ";<a-a>$obj")"; return
+		fi
+		ek=$(kq "<a-k>\\A\\Q$o\\E.*\\Q$c\\E\\z<ret>")
+		printf '%s\n' "evaluate-commands -itersel $(kq "try %{ execute-keys $ek } catch %{ execute-keys $(kq ";<a-a>$obj") }")"
+	}
 }
 
 define-command -override -hidden surround-add %{
@@ -1547,14 +1561,14 @@ define-command -override -hidden -params 2 surround-insert %{
 define-command -override -hidden surround-delete %{
 	on-key -mode-name surround %{ evaluate-commands %sh{
 		eval "$kak_opt_surround_sh"; surround_char "$kak_key"
-		# around it, its first and last characters, gone
-		printf '%s\n' "execute-keys $(kq "<a-a>$obj<a-S>d")"
+		# the pair, its first and last characters, gone
+		around; echo 'execute-keys <a-S>d'
 	} }
 }
 define-command -override -hidden surround-replace %{
 	on-key -mode-name surround %{ evaluate-commands %sh{
 		eval "$kak_opt_surround_sh"; surround_char "$kak_key"
-		printf '%s\n' "execute-keys $(kq "<a-a>$obj<a-S>")"
+		around; echo 'execute-keys <a-S>'
 		echo 'surround-replace-with'
 	} }
 }
