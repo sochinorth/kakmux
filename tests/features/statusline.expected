@@ -1,0 +1,12 @@
+ok   git counts, name
+ok   workspace-relative name
+ok   modified, an error
+' ● 1' '1' ' │'
+ok   INS
+ok   USER
+ok   GOTO
+<pad> ⎇ trunk +1 ~1 ?1 │ main.c [+] │ ● 1 │ 13 sels │ 13:6
+<pad> ⎇ trunk +1 ~1 ?1 │ main.c [+] │ ● 1 │ 13:6
+<pad> ⎇ trunk +1 ~1 ?1 │ main.c [+] │ ● 1 │ 13:6
+<pad> ⎇ @H +1 ~2 ?1 │ main.c │ ● 1 │ 13:6
+' ⎇ @H' 'main.c' ' │'

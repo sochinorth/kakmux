@@ -1,0 +1,24 @@
+dir @RUN/tmp/kak-picker.@:
+cols
+faces
+last
+list
+only
+root
+rows
+title
+type
+wsroot
+only=@RUN/p/proj/t.c
+ok   picker list: 5 entries
+'only:' 'pickers:' 'client0' 'pending:'
+  4│ {
+● 5│ │   int x = "str";   Incompatible pointer to integer conversion initializing 'int' with an expression of type 'char[4]'
+● 6│ │   foo(old, &tmp);   Call to undeclared function 'foo'; ISO C99 and later do not support implicit function declarations
+  7│ │   printf("%d\n", x)
+● 8│ │   return 0;   Expected ';' after expression (fix available)
+  9│ }
+~
+~
+~
+'only:' 'pickers:' 'client0' 'pending:'

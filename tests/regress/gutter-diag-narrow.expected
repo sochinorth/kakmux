@@ -1,0 +1,20 @@
+  1│▍// changed|
+  2│ #include <stdio.h>|
+  3│|
+  4│ int main(void)|
+  5│ {|
+● 6│ │   int x = "str";   Incompatible pointer to integer conversion i|
+● 7│ │   foo(old, &tmp);|
+  7│     │   │     └─Use of undeclared identifier 'tmp'|
+  7│     │   └─Use of undeclared identifier 'old'|
+  7│     └─Call to undeclared function 'foo'; ISO C99 and later do|
+  7│       not support implicit function declarations|
+  8│ │   printf("%d\n", x)|
+● 9│ │   return 0;   Expected ';' after expression (fix available)|
+ 10│ }|
+ok   flags
+'1' '7.18+0|
+{InlineDiagnosticDefault}    {InlineDiagnosticError}│{InlineDiagnosticDefault}   {InlineDiagnosticError}│{InlineDiagnosticDefault}     {InlineDiagnosticError}└─Use of undeclared identifier '\''tmp'\''
+{InlineDiagnosticDefault}    {InlineDiagnosticError}│{InlineDiagnosticDefault}   {InlineDiagnosticError}└─Use of undeclared identifier '\''old'\''
+{InlineDiagnosticDefault}    {InlineDiagnosticError}└─Call to undeclared function '\''foo'\''; ISO C99 and later do
+{InlineDiagnosticDefault}    {InlineDiagnosticDefault}  {InlineDiagnosticError}not support implicit function declarations'

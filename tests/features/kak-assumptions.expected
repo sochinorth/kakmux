@@ -1,0 +1,22 @@
+A1-fail 1:2: 'alias': no such command: 'no-such-cmd'
+A2-ok
+A3-fail 1:2: 'alias': no such command: 'clang-enable-autocomplete'
+== NormalKey for a mapped <ret>
+MAPPED
+== ModeChange
+MC push:normal:next-key[user-mapping]
+MC pop:next-key[user-mapping]:normal
+MC push:normal:insert
+MC pop:insert:normal
+MC push:normal:prompt
+MC pop:prompt:normal
+MC push:normal:next-key[goto]
+MC pop:next-key[goto]:normal
+MC push:normal:prompt
+MC pop:prompt:normal
+MC push:normal:next-key[to-char]
+MC pop:next-key[to-char]:normal
+MC push:normal:next-key[register]
+MC pop:next-key[register]:normal
+MC push:normal:insert
+MC pop:insert:normal

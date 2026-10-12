@@ -1,0 +1,8 @@
+== raw object probes on 'x ,ab, y' cursor on a
+'probe' '\,' ':' '1.3,1.6'
+== md, (delete ,…, around a)
+ok   md,
+== mr,(
+ok   mr,(
+== ms, on ab
+ok   ms,

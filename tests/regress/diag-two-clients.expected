@@ -1,0 +1,16 @@
+== wsym route
+wsym file: t2.c:3:5: main (Function)
+'wsym_out:' '' 'pickers:'
+== edit in client0 (line 2: zzz;), both clients get it
+'c0' 'n:' '6' 'st:' '' 'pend:'
+'c1' 'line' '7' 'drawn' '1' 'seen' '7'
+  1│ #include <stdio.h>
+  2│
+● 3│ zzz;   Type specifier missing, defaults to 'int'; ISO C99 and later do not
+  4│ int main(void)
+  5│ {
+● 6│     int x = "str";   Incompatible pointer to integer conversion initializi
+● 7│     foo(old, &tmp);
+  7│     │   │     └─Use of undeclared identifier 'tmp'
+  7│     │   └─Use of undeclared identifier 'old'
+  7│     └─Call to undeclared function 'foo'; ISO C99 and later do not support

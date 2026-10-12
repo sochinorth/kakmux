@@ -1,0 +1,13 @@
+'*debug*' 'main.c' 'point.c' 'util.c' 'yes'
+
+ok   opened buffers closed by the timer
+'*debug*' 'main.c' 'point.c' 'point.h' ''
+renamed: 3 edits in 3 files (unsaved: :wa writes them)
+ok   disk untouched
+'10|19|error|Call to undeclared function '\''psum'\''; ISO C99 and later do not support implicit function declarations' '10|15|error|Initializing '\''struct point'\'' with an expression of incompatible type '\''int'\''' ''
+renamed: 3 edits in 3 files (unsaved: :wa writes them)
+''
+''
+ok   builds
+LSP: ERRO Error response from server clangd: Failure { jsonrpc: Some(V2), error: Error { code: ServerError(-32001), message: "Cannot rename symbol: there is no symbol at the given location", data: None }, id: Num(1) }
+LSP: ERRO language server clangd error: 'Cannot rename symbol: there is no symbol at the given location'

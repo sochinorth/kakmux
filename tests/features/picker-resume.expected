@@ -1,0 +1,43 @@
+== files: query 'po', down 1, esc; resume
+│ > po <pad> 3/8
+│ ──────────────────────────────────────────────────────────────
+│ ▌ point.c
+│ ▌ point.h
+│ ▌ compile_commands.json
+╭─ files · proj ────────────────────────────────────────────────
+│ > po <pad> 3/8
+│ ──────────────────────────────────────────────────────────────
+│ ▌ point.c
+│ ▌ point.h
+│ ▌ compile_commands.json
+ok   resumed files pick
+== grep
+ok   grep pick
+╭─ global search · proj ────────────────────────────────────────────────
+│ / define POINT_ <pad> 1/1
+│ ──────────────────────────────────────────────────────────────────────
+│ ▌ point.h:2  #define POINT_H
+│
+│
+│
+== references: list reused
+ok   references pick
+╭─ locations ───────────────────────────────────────────────────────────
+│ > <pad> 4/4
+│ ──────────────────────────────────────────────────────────────────────
+│ ▌ main.c:12  printf("dist2 = %d\n", point_dist2(a, b));
+│ ▌ point.c:4  int point_dist2(struct point a, struct point b)
+│ ▌ point.h:9  int point_dist2(struct point a, struct point b);
+│ ▌ util.c:6   return point_dist2(p, p) + 2 * v;
+== buffers
+│ ──────────────────────────────────────────────────────────────
+│ ▌ point.h [+]
+│ ▌ main.c
+│
+│
+@RUN/tmp/kak-picker-last.@P-res
+cwd
+kind
+pos
+query
+ok   nothing left after the session

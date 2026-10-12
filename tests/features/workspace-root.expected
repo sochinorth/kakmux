@@ -1,0 +1,5 @@
+ok   in a repo: its root
+ok   .helix dir
+ok   outside: kak's cwd
+'@RUN/p/proj'
+'@RUN/p/proj'

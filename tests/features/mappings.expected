@@ -1,0 +1,297 @@
+Mappings:
+ * normal <left>: 'h'
+ * normal <right>: 'l'
+ * normal <down>: 'j'
+ * normal <up>: 'k'
+ * normal <s-left>: 'H'
+ * normal <s-right>: 'L'
+ * normal <s-down>: 'J'
+ * normal <s-up>: 'K'
+ * normal <end>: '<a-l>'
+ * normal <home>: '<a-h>'
+ * normal <s-end>: '<a-L>'
+ * normal <s-home>: '<a-H>'
+ * normal m: ':enter<minus>user<minus>mode<space>match<ret>' match mode
+ * normal <c-right>: 'w'
+ * normal <c-left>: 'b'
+ * normal z: ':enter<minus>user<minus>mode<space>zview<ret>' view mode
+ * normal Z: ':enter<minus>user<minus>mode<space><minus>lock<space>zview<ret>' view mode (sticky)
+ * normal ]: ':enter<minus>user<minus>mode<space>next<ret>' next (Helix ])
+ * normal [: ':enter<minus>user<minus>mode<space>prev<ret>' previous (Helix [)
+ * normal x: ':extend<minus>line<minus>below<ret>'
+ * normal X: 'x'
+ * normal J: '<a-j>'
+ * normal K: '<a-k>'
+ * normal =: ':lsp<minus>range<minus>formatting<ret>'
+ * normal <a-minus>: ':merge<minus>selections<ret>'
+ * normal ~: '<a-`>'
+ * normal <a-`>: '~'
+ * normal <c-a>: ':increment<space><percent>val{count}<ret>'
+ * normal <c-x>: ':increment<space><dquote><minus><percent>val{count}<dquote><ret>'
+ * normal <a-up>: ':ts<minus>expand<ret>'
+ * normal <a-down>: ':ts<minus>shrink<ret>'
+ * normal <a-left>: ':tree<minus>sitter<minus>nav<space><quote>{<space><dquote>prev_sibling<dquote>:<space>{<space><dquote>cousin<dquote>:<space>false<space>}<space>}<quote><ret>'
+ * normal <a-right>: ':tree<minus>sitter<minus>nav<space><quote>{<space><dquote>next_sibling<dquote>:<space>{<space><dquote>cousin<dquote>:<space>false<space>}<space>}<quote><ret>'
+ * normal /: ':smart<minus>case<minus>arm<ret>/(?i)'
+ * normal ?: ':smart<minus>case<minus>arm<ret>?(?i)'
+ * normal <a-/>: ':smart<minus>case<minus>arm<ret><a-/>(?i)'
+ * normal <a-?>: ':smart<minus>case<minus>arm<ret><a-?>(?i)'
+ * normal <ret>: ':<space>jump<minus>labels<ret>' jump to a word (labels)
+ * normal <s-ret>: ':<space>jump<minus>labels<space><minus>extend<ret>' extend to a word (labels)
+ * normal <c-w>: ':enter<minus>user<minus>mode<space>window<ret>'
+ * insert <c-right>: '<a-semicolon>w<a-semicolon>l'
+ * insert <c-left>: '<a-semicolon>b<a-semicolon><semicolon>'
+ * insert <s-right>: '<a-semicolon>L'
+ * insert <s-left>: '<a-semicolon>H'
+ * insert <c-w>: '<a-semicolon>:insert<minus>delete<space><minus>word<minus>before<ret>'
+ * insert <a-backspace>: '<a-semicolon>:insert<minus>delete<space><minus>word<minus>before<ret>'
+ * insert <a-d>: '<a-semicolon>:insert<minus>delete<space><minus>word<minus>after<ret>'
+ * insert <c-u>: '<a-semicolon>:insert<minus>delete<space><minus>line<minus>before<ret>'
+ * insert <c-k>: '<a-semicolon>:insert<minus>delete<space><minus>line<minus>after<ret>'
+ * insert <c-h>: '<backspace>'
+ * insert <c-d>: '<del>'
+ * insert <c-j>: '<ret>'
+ * insert <c-s>: '<c-u>'
+ * insert <tab>: '<tab><a-semicolon>:insert<minus>indent<minus>expand<ret>'
+ * insert <s-tab>: '<tab><a-semicolon>:insert<minus>indent<minus>expand<ret>'
+ * goto d: '<esc>:lsp<minus>definition<ret>' definition (LSP)
+ * goto D: '<esc>:lsp<minus>declaration<ret>' declaration (LSP)
+ * goto y: '<esc>:lsp<minus>type<minus>definition<ret>' type definition (LSP)
+ * goto r: '<esc>:lsp<minus>references<ret>' references (LSP)
+ * goto i: '<esc>:lsp<minus>implementation<ret>' implementation (LSP)
+ * goto s: 'i' line start (non-blank)
+ * goto e: 'j' last line
+ * goto k: '<esc>k' line up
+ * goto j: '<esc>j' line down
+ * goto |: '<esc>:goto<minus>column<ret>' column
+ * goto f: '<esc>:goto<minus>file<ret>' file under cursor (or selected)
+ * goto n: '<esc>:buffer<minus>next<ret>' next buffer
+ * goto p: '<esc>:buffer<minus>previous<ret>' previous buffer
+ * user k: ':lsp<minus>hover<ret>' hover (LSP)
+ * user r: ':lsp<minus>rename<minus>prompt<ret>' rename (LSP)
+ * user a: ':lsp<minus>code<minus>actions<ret>' code actions (LSP)
+ * user h: ':lsp<minus>highlight<minus>references<ret>' highlight references (LSP)
+ * user l: ':enter<minus>user<minus>mode<space>lsp<ret>' LSP mode (everything else)
+ * user t: ':enter<minus>user<minus>mode<space><minus>lock<space>tree<minus>sitter<ret>' tree-sitter mode (sticky)
+ * user s: ':symbol<minus>picker<ret>' symbols (LSP)
+ * user S: ':workspace<minus>symbol<minus>picker<ret>' workspace symbols (LSP)
+ * user d: ':diagnostics<minus>picker<ret>' diagnostics (LSP)
+ * user D: ':diagnostics<minus>picker<space><minus>workspace<ret>' workspace diagnostics (LSP)
+ * user /: ':global<minus>search<ret>' global search
+ * user g: ':changed<minus>file<minus>picker<ret>' changed files (git)
+ * user c: ':comment<minus>line<ret>' toggle line comments
+ * user C: ':comment<minus>block<ret>' toggle block comments
+ * user y: ':clipboard<minus>yank<ret>' yank selections to clipboard
+ * user Y: ':clipboard<minus>yank<space><minus>main<ret>' yank main selection to clipboard
+ * user p: ':clipboard<minus>paste<space>p<ret>' paste clipboard after
+ * user P: ':clipboard<minus>paste<space>P<ret>' paste clipboard before
+ * user R: ':clipboard<minus>paste<space>R<ret>' replace selections with clipboard
+ * user <quote>: ':picker<minus>resume<ret>' last picker again
+ * user b: ':buffer<minus>picker<ret>' buffer picker
+ * user f: ':file<minus>picker<ret>' file picker (workspace)
+ * user F: ':file<minus>picker<space><minus>cwd<ret>' file picker (kak's cwd)
+ * user ?: ':command<minus>palette<ret>' command palette
+ * user e: ':explorer<ret>' file explorer (workspace root)
+ * user E: ':explorer<space><minus>buffer<minus>dir<ret>' file explorer (buffer's directory)
+ * user w: ':enter<minus>user<minus>mode<space>window<ret>' window mode
+ * object f: '<a-semicolon>tree<minus>sitter<minus>object<minus>text<minus>objects<space>function<ret>' function (tree-sitter)
+ * object t: '<a-semicolon>tree<minus>sitter<minus>object<minus>text<minus>objects<space>class<ret>' type (tree-sitter)
+ * object a: '<a-semicolon>tree<minus>sitter<minus>object<minus>text<minus>objects<space>parameter<ret>' argument (tree-sitter)
+ * object T: '<a-semicolon>tree<minus>sitter<minus>object<minus>text<minus>objects<space>test<ret>' test (tree-sitter)
+ * object d: '<a-semicolon>lsp<minus>diagnostic<minus>object<space>error<space>warning<space>info<space>hint<ret>' diagnostic (LSP)
+ * object g: '<a-semicolon>git<minus>hunk<minus>object<ret>' git change
+ * man g: ':man<minus>jump<ret>' Jump to a man page using selected man page link
+ * man j: ':man<minus>link<minus>next<ret>' Go to next man page link
+ * man k: ':man<minus>link<minus>prev<ret>' Go to previous man page link
+ * man m: ':man<space>' Look up a man page
+ * tree-sitter /: ':enter<minus>user<minus>mode<space>tree<minus>sitter<minus>search<ret>' search next
+ * tree-sitter <a-/>: ':enter<minus>user<minus>mode<space>tree<minus>sitter<minus>search<minus>rev<ret>' search prev
+ * tree-sitter ?: ':enter<minus>user<minus>mode<space>tree<minus>sitter<minus>search<minus>extend<ret>' search(extend) next
+ * tree-sitter <a-?>: ':enter<minus>user<minus>mode<space>tree<minus>sitter<minus>search<minus>extend<minus>rev<ret>' search(extend) prev
+ * tree-sitter f: ':enter<minus>user<minus>mode<space>tree<minus>sitter<minus>find<ret>' find next
+ * tree-sitter <a-f>: ':enter<minus>user<minus>mode<space>tree<minus>sitter<minus>find<minus>rev<ret>' find prev
+ * tree-sitter F: ':enter<minus>user<minus>mode<space>tree<minus>sitter<minus>find<minus>extend<ret>' find(extend) next
+ * tree-sitter <a-F>: ':enter<minus>user<minus>mode<space>tree<minus>sitter<minus>find<minus>extend<minus>rev<ret>' find(extend) prev
+ * tree-sitter k: ':enter<minus>user<minus>mode<space>tree<minus>sitter<minus>select<ret>' select
+ * tree-sitter s: ':tree<minus>sitter<minus>nav<space><quote><dquote>parent<dquote><quote><ret>' select parent
+ * tree-sitter t: ':tree<minus>sitter<minus>nav<space><quote><dquote>first_child<dquote><quote><ret>' select first child
+ * tree-sitter <c-t>: ':tree<minus>sitter<minus>nav<space><quote><dquote>last_child<dquote><quote><ret>' select last child
+ * tree-sitter c: ':tree<minus>sitter<minus>nav<space><quote>{<space><dquote>prev_sibling<dquote>:<space>{<space><dquote>cousin<dquote>:<space>false<space>}<space>}<quote><ret>' select previous sibling
+ * tree-sitter r: ':tree<minus>sitter<minus>nav<space><quote>{<space><dquote>next_sibling<dquote>:<space>{<space><dquote>cousin<dquote>:<space>false<space>}<space>}<quote><ret>' select next sibling
+ * tree-sitter C: ':tree<minus>sitter<minus>nav<space><quote>{<space><dquote>prev_sibling<dquote>:<space>{<space><dquote>cousin<dquote>:<space>true<space>}<space>}<quote><ret>' select previous sibling (cousin)
+ * tree-sitter R: ':tree<minus>sitter<minus>nav<space><quote>{<space><dquote>next_sibling<dquote>:<space>{<space><dquote>cousin<dquote>:<space>true<space>}<space>}<quote><ret>' select next sibling (cousin)
+ * tree-sitter (: ':tree<minus>sitter<minus>nav<space><quote><dquote>first_sibling<dquote><quote><ret>' select first sibling
+ * tree-sitter ): ':tree<minus>sitter<minus>nav<space><quote><dquote>last_sibling<dquote><quote><ret>' select last sibling
+ * tree-sitter T: ':enter<minus>user<minus>mode<space>tree<minus>sitter<minus>nav<minus>sticky<ret>' sticky tree navigation
+ * tree-sitter a: ':ts<minus>select<minus>all<space>siblings<ret>' select all siblings
+ * tree-sitter i: ':ts<minus>select<minus>all<space>children<ret>' select all children
+ * tree-sitter-search f: ':tree<minus>sitter<minus>text<minus>objects<space>function.around<space>search_next<ret>' function
+ * tree-sitter-search a: ':tree<minus>sitter<minus>text<minus>objects<space>parameter.around<space>search_next<ret>' parameter
+ * tree-sitter-search t: ':tree<minus>sitter<minus>text<minus>objects<space>class.around<space>search_next<ret>' class
+ * tree-sitter-search c: ':tree<minus>sitter<minus>text<minus>objects<space>comment.around<space>search_next<ret>' comment
+ * tree-sitter-search T: ':tree<minus>sitter<minus>text<minus>objects<space>test.around<space>search_next<ret>' test
+ * tree-sitter-search-rev f: ':tree<minus>sitter<minus>text<minus>objects<space>function.around<space>search_prev<ret>' function
+ * tree-sitter-search-rev a: ':tree<minus>sitter<minus>text<minus>objects<space>parameter.around<space>search_prev<ret>' parameter
+ * tree-sitter-search-rev t: ':tree<minus>sitter<minus>text<minus>objects<space>class.around<space>search_prev<ret>' class
+ * tree-sitter-search-rev T: ':tree<minus>sitter<minus>text<minus>objects<space>test.around<space>search_prev<ret>' test
+ * tree-sitter-search-extend f: ':tree<minus>sitter<minus>text<minus>objects<space>function.around<space>search_extend_next<ret>' function
+ * tree-sitter-search-extend a: ':tree<minus>sitter<minus>text<minus>objects<space>parameter.around<space>search_extend_next<ret>' parameter
+ * tree-sitter-search-extend t: ':tree<minus>sitter<minus>text<minus>objects<space>class.around<space>search_extend_next<ret>' class
+ * tree-sitter-search-extend T: ':tree<minus>sitter<minus>text<minus>objects<space>test.around<space>search_extend_next<ret>' test
+ * tree-sitter-search-extend-rev f: ':tree<minus>sitter<minus>text<minus>objects<space>function.around<space>search_extend_prev<ret>' function
+ * tree-sitter-search-extend-rev a: ':tree<minus>sitter<minus>text<minus>objects<space>parameter.around<space>search_extend_prev<ret>' parameter
+ * tree-sitter-search-extend-rev t: ':tree<minus>sitter<minus>text<minus>objects<space>class.around<space>search_extend_prev<ret>' class
+ * tree-sitter-search-extend-rev T: ':tree<minus>sitter<minus>text<minus>objects<space>test.around<space>search_extend_prev<ret>' test
+ * tree-sitter-find f: ':tree<minus>sitter<minus>text<minus>objects<space>function.around<space>find_next<ret>' function
+ * tree-sitter-find a: ':tree<minus>sitter<minus>text<minus>objects<space>parameter.around<space>find_next<ret>' parameter
+ * tree-sitter-find t: ':tree<minus>sitter<minus>text<minus>objects<space>class.around<space>find_next<ret>' class
+ * tree-sitter-find T: ':tree<minus>sitter<minus>text<minus>objects<space>test.around<space>find_next<ret>' test
+ * tree-sitter-find-rev f: ':tree<minus>sitter<minus>text<minus>objects<space>function.around<space>find_prev<ret>' function
+ * tree-sitter-find-rev a: ':tree<minus>sitter<minus>text<minus>objects<space>parameter.around<space>find_prev<ret>' parameter
+ * tree-sitter-find-rev t: ':tree<minus>sitter<minus>text<minus>objects<space>class.around<space>find_prev<ret>' class
+ * tree-sitter-find-rev T: ':tree<minus>sitter<minus>text<minus>objects<space>test.around<space>find_prev<ret>' test
+ * tree-sitter-find-extend f: ':tree<minus>sitter<minus>text<minus>objects<space>function.around<space>extend_next<ret>' function
+ * tree-sitter-find-extend a: ':tree<minus>sitter<minus>text<minus>objects<space>parameter.around<space>extend_next<ret>' parameter
+ * tree-sitter-find-extend t: ':tree<minus>sitter<minus>text<minus>objects<space>class.around<space>extend_next<ret>' class
+ * tree-sitter-find-extend T: ':tree<minus>sitter<minus>text<minus>objects<space>test.around<space>extend_next<ret>' test
+ * tree-sitter-find-extend-rev f: ':tree<minus>sitter<minus>text<minus>objects<space>function.around<space>extend_prev<ret>' function
+ * tree-sitter-find-extend-rev a: ':tree<minus>sitter<minus>text<minus>objects<space>parameter.around<space>extend_prev<ret>' parameter
+ * tree-sitter-find-extend-rev t: ':tree<minus>sitter<minus>text<minus>objects<space>class.around<space>extend_prev<ret>' class
+ * tree-sitter-find-extend-rev T: ':tree<minus>sitter<minus>text<minus>objects<space>test.around<space>extend_prev<ret>' test
+ * tree-sitter-select f: ':tree<minus>sitter<minus>text<minus>objects<space>function.around<space>select<ret>' function
+ * tree-sitter-select a: ':tree<minus>sitter<minus>text<minus>objects<space>parameter.around<space>select<ret>' parameter
+ * tree-sitter-select t: ':tree<minus>sitter<minus>text<minus>objects<space>class.around<space>select<ret>' class
+ * tree-sitter-select T: ':tree<minus>sitter<minus>text<minus>objects<space>test.around<space>select<ret>' test
+ * tree-sitter-nav-sticky s: ':tree<minus>sitter<minus>nav<minus>sticky<minus>parent<ret>' select parent
+ * tree-sitter-nav-sticky t: ':tree<minus>sitter<minus>nav<minus>sticky<minus>first<minus>child<ret>' select first child
+ * tree-sitter-nav-sticky <c-t>: ':tree<minus>sitter<minus>nav<minus>sticky<minus>first<minus>child<ret>' select last child
+ * tree-sitter-nav-sticky C: ':tree<minus>sitter<minus>nav<minus>sticky<minus>prev<minus>sibling<space>true<ret>' select previous sibling (cousin)
+ * tree-sitter-nav-sticky R: ':tree<minus>sitter<minus>nav<minus>sticky<minus>next<minus>sibling<space>true<ret>' select next sibling (cousin)
+ * tree-sitter-nav-sticky c: ':tree<minus>sitter<minus>nav<minus>sticky<minus>prev<minus>sibling<space>false<ret>' select previous sibling
+ * tree-sitter-nav-sticky r: ':tree<minus>sitter<minus>nav<minus>sticky<minus>next<minus>sibling<space>false<ret>' select next sibling
+ * tree-sitter-nav-sticky (: ':tree<minus>sitter<minus>nav<minus>sticky<minus>first<minus>sibling<ret>' select first sibling
+ * tree-sitter-nav-sticky ): ':tree<minus>sitter<minus>nav<minus>sticky<minus>last<minus>sibling<ret>' select last sibling
+ * tree-sitter-nav-sticky u: ':tree<minus>sitter<minus>nav<minus>sticky<minus>undo<ret>' undo selection
+ * lsp a: '<esc>:<space>lsp<minus>code<minus>actions<ret>' show code actions for current position
+ * lsp c: '<esc>:<space>lsp<minus>capabilities<ret>' show language server capabilities
+ * lsp d: '<esc>:<space>lsp<minus>definition<ret>' go to definition
+ * lsp e: '<esc>:<space>lsp<minus>diagnostics<ret>' list project errors, info, hints and warnings
+ * lsp f: '<esc>:<space>lsp<minus>formatting<ret>' format buffer
+ * lsp h: '<esc>:<space>lsp<minus>hover<ret>' show info for current position
+ * lsp H: '<esc>:<space>lsp<minus>hover<minus>buffer<ret>' show info for current position in a scratch buffer
+ * lsp i: '<esc>:<space>lsp<minus>implementation<ret>' go to implementation
+ * lsp j: '<esc>:<space>lsp<minus>outgoing<minus>calls<ret>' list outgoing call for function at cursor
+ * lsp k: '<esc>:<space>lsp<minus>incoming<minus>calls<ret>' list incoming call for function at cursor
+ * lsp l: '<esc>:<space>lsp<minus>code<minus>lens<ret>' apply a code lens from the current selection
+ * lsp o: '<esc>:<space>lsp<minus>workspace<minus>symbol<minus>incr<ret>' search project symbols
+ * lsp n: '<esc>:<space>lsp<minus>find<minus>error<ret>' find next error
+ * lsp p: '<esc>:<space>lsp<minus>find<minus>error<space><minus><minus>previous<ret>' find previous error
+ * lsp q: '<esc>:<space>lsp<minus>disable<ret>' disable LSP integration
+ * lsp r: '<esc>:<space>lsp<minus>references<ret>' list symbol references
+ * lsp R: '<esc>:<space>lsp<minus>rename<minus>prompt<ret>' rename symbol
+ * lsp s: '<esc>:<space>lsp<minus>goto<minus>document<minus>symbol<ret>' jump to document symbol
+ * lsp S: '<esc>:<space>lsp<minus>document<minus>symbol<ret>' list document symbols
+ * lsp v: '<esc>:<space>lsp<minus>selection<minus>range<ret>' select inner/outer nodes
+ * lsp V: '<esc>:<space>lsp<minus>selection<minus>range<space>cached<ret>' select inner/outer nodes (re-use previous call)
+ * lsp y: '<esc>:<space>lsp<minus>type<minus>definition<ret>' go to type definition
+ * lsp [: '<esc>:<space>lsp<minus>hover<minus>previous<minus>symbol<ret>' show hover for previous symbol
+ * lsp ]: '<esc>:<space>lsp<minus>hover<minus>next<minus>symbol<ret>' show hover for next symbol
+ * lsp {: '<esc>:<space>lsp<minus>previous<minus>symbol<ret>' goto previous symbol
+ * lsp }: '<esc>:<space>lsp<minus>next<minus>symbol<ret>' goto next symbol
+ * lsp 9: '<esc>:<space>lsp<minus>hover<minus>previous<minus>function<ret>' show hover for previous function
+ * lsp 0: '<esc>:<space>lsp<minus>hover<minus>next<minus>function<ret>' show hover for next function
+ * lsp (: '<esc>:<space>lsp<minus>previous<minus>function<ret>' goto previous function
+ * lsp ): '<esc>:<space>lsp<minus>next<minus>function<ret>' goto next function
+ * lsp &: '<esc>:<space>lsp<minus>highlight<minus>references<ret>' lsp-highlight-references
+ * lsp =: '<esc>:<space>lsp<minus>range<minus>formatting<ret>' format selections
+ * lsp-selection-range j: '<esc>:<space>lsp<minus>selection<minus>range<minus>select<space>down<ret>' select inner node
+ * lsp-selection-range k: '<esc>:<space>lsp<minus>selection<minus>range<minus>select<space>up<ret>' select outer node
+ * lsp-selection-range b: '<esc>:<space>lsp<minus>selection<minus>range<minus>select<space>bottom<ret>' select innermost node
+ * lsp-selection-range t: '<esc>:<space>lsp<minus>selection<minus>range<minus>select<space>top<ret>' select outermost node
+ * match m: 'm' goto matching bracket
+ * match i: '<a-i>' select inside object
+ * match a: '<a-a>' select around object
+ * match s: ':surround<minus>add<ret>' surround add
+ * match r: ':surround<minus>replace<ret>' surround replace
+ * match d: ':surround<minus>delete<ret>' surround delete
+ * zview z: 'vc' center line vertically
+ * zview c: 'vc' center line vertically
+ * zview t: 'vt' line to top
+ * zview b: 'vb' line to bottom
+ * zview m: 'vm' center column horizontally
+ * zview k: 'vk' scroll up
+ * zview j: 'vj' scroll down
+ * zview <up>: 'vk' scroll up
+ * zview <down>: 'vj' scroll down
+ * zview h: 'vh' scroll left
+ * zview l: 'vl' scroll right
+ * zview <c-b>: '<c-b>' page up
+ * zview <c-f>: '<c-f>' page down
+ * zview <pageup>: '<c-b>' page up
+ * zview <pagedown>: '<c-f>' page down
+ * zview <c-u>: '<c-u>' half page up
+ * zview <c-d>: '<c-d>' half page down
+ * zview <backspace>: '<c-u>' half page up
+ * zview <space>: '<c-d>' half page down
+ * zview /: ':smart<minus>case<minus>arm<ret>/(?i)' search forward
+ * zview ?: ':smart<minus>case<minus>arm<ret><a-/>(?i)' search backward
+ * zview n: 'n' next match
+ * zview N: '<a-n>' previous match
+ * zview s: 'Z' save selections (Kakoune's Z)
+ * zview r: 'z' restore selections (Kakoune's z)
+ * next ]: ']' select to object end (Kakoune's ])
+ * next d: ':lsp<minus>find<minus>error<space>error<space>warning<space>info<space>hint<ret>' diagnostic
+ * next D: ':diagnostic<minus>goto<space>last<ret>' last diagnostic
+ * next g: ':git<minus>hunk<minus>goto<space>next<ret>' git change
+ * next G: ':git<minus>hunk<minus>goto<space>last<ret>' last git change
+ * next f: ':tree<minus>sitter<minus>text<minus>objects<space>function.around<space>search_next<ret>' function
+ * next t: ':tree<minus>sitter<minus>text<minus>objects<space>class.around<space>search_next<ret>' type
+ * next a: ':tree<minus>sitter<minus>text<minus>objects<space>parameter.around<space>search_next<ret>' argument
+ * next c: ':tree<minus>sitter<minus>text<minus>objects<space>comment.around<space>search_next<ret>' comment
+ * next e: ':tree<minus>sitter<minus>text<minus>objects<space>entry.around<space>search_next<ret>' entry
+ * next T: ':tree<minus>sitter<minus>text<minus>objects<space>test.around<space>search_next<ret>' test
+ * next p: ']p' paragraph
+ * next <space>: '<a-o>' add blank line below
+ * prev [: '[' select to object start (Kakoune's [)
+ * prev d: '<semicolon>h:lsp<minus>find<minus>error<space><minus><minus>previous<space>error<space>warning<space>info<space>hint<ret>' diagnostic
+ * prev D: ':diagnostic<minus>goto<space>first<ret>' first diagnostic
+ * prev g: ':git<minus>hunk<minus>goto<space>prev<ret>' git change
+ * prev G: ':git<minus>hunk<minus>goto<space>first<ret>' first git change
+ * prev f: ':tree<minus>sitter<minus>text<minus>objects<space>function.around<space>search_prev<ret>' function
+ * prev t: ':tree<minus>sitter<minus>text<minus>objects<space>class.around<space>search_prev<ret>' type
+ * prev a: ':tree<minus>sitter<minus>text<minus>objects<space>parameter.around<space>search_prev<ret>' argument
+ * prev c: ':tree<minus>sitter<minus>text<minus>objects<space>comment.around<space>search_prev<ret>' comment
+ * prev e: ':tree<minus>sitter<minus>text<minus>objects<space>entry.around<space>search_prev<ret>' entry
+ * prev T: ':tree<minus>sitter<minus>text<minus>objects<space>test.around<space>search_prev<ret>' test
+ * prev p: '[p' paragraph
+ * prev <space>: '<a-O>' add blank line above
+ * window v: ':vsplit<ret>' split side by side
+ * window s: ':hsplit<ret>' split stacked
+ * window h: ':split<minus>focus<space><minus>L<ret>' focus left
+ * window j: ':split<minus>focus<space><minus>D<ret>' focus down
+ * window k: ':split<minus>focus<space><minus>U<ret>' focus up
+ * window l: ':split<minus>focus<space><minus>R<ret>' focus right
+ * window <left>: ':split<minus>focus<space><minus>L<ret>' focus left
+ * window <down>: ':split<minus>focus<space><minus>D<ret>' focus down
+ * window <up>: ':split<minus>focus<space><minus>U<ret>' focus up
+ * window <right>: ':split<minus>focus<space><minus>R<ret>' focus right
+ * window w: ':tmux<minus>here<space>select<minus>pane<space><minus>t<space>:.<plus><ret>' next split
+ * window q: ':quit<ret>' close this split
+ * window o: ':split<minus>only<ret>' close other splits
+ * window z: ':tmux<minus>here<space>resize<minus>pane<space><minus>Z<space><minus>t<space><percent>val{client_env_TMUX_PANE}<ret>' zoom this split (toggle)
+ * window =: ':splits<minus>even<ret>' even out all splits
+ * window H: ':split<minus>swap<space><minus>L<ret>' swap with the split left
+ * window J: ':split<minus>swap<space><minus>D<ret>' swap with the split below
+ * window K: ':split<minus>swap<space><minus>U<ret>' swap with the split above
+ * window L: ':split<minus>swap<space><minus>R<ret>' swap with the split right
+ * window f: ':split<minus>goto<minus>file<space><minus>v<ret>' file under cursor, split stacked
+ * window F: ':split<minus>goto<minus>file<space><minus>h<ret>' file under cursor, split side by side
+ * window <c-v>: ':vsplit<ret>' split side by side
+ * window <c-s>: ':hsplit<ret>' split stacked
+ * window <c-h>: ':split<minus>focus<space><minus>L<ret>' focus left
+ * window <c-j>: ':split<minus>focus<space><minus>D<ret>' focus down
+ * window <c-k>: ':split<minus>focus<space><minus>U<ret>' focus up
+ * window <c-l>: ':split<minus>focus<space><minus>R<ret>' focus right
+ * window <c-w>: ':tmux<minus>here<space>select<minus>pane<space><minus>t<space>:.<plus><ret>' next split
+ * window <c-q>: ':quit<ret>' close this split
+ * window <c-o>: ':split<minus>only<ret>' close other splits

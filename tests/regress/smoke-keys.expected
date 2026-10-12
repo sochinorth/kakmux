@@ -1,0 +1,13 @@
+start      int util_twice(int v); 'util_twice'
+ms(        int (util_twice)(int v); '(util_twice)'
+;mr([      int [util_twice](int v); ']'
+;md[       int util_twice(int v); '('
+mi(        int util_twice(int v); 'int v'
+ok   clip
+paste R    	struct point c = util_twice(a, b); 'util_twice'
+paste p    	struct point c = util_twiceutil_twice(a, b); 'util_twice'
+== gr list
+main.c:12:25:	printf("dist2 = %d\n", point_dist2(a, b));
+point.c:4:5:int point_dist2(struct point a, struct point b)
+point.h:9:5:int point_dist2(struct point a, struct point b);
+util.c:6:9:	return point_dist2(p, p) + 2 * v;

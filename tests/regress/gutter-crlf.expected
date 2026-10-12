@@ -1,0 +1,17 @@
+ M a.txt
+'eol:' 'crlf' 'flags:' '1' '0| '
+ok   diff.external not called
+temp files left:
+== delete the last two lines
+'lines:' '3' 'flags:' '2' '0| ' '3|{GitGutterDelete}▔'
+  1│ one
+  2│ two
+  3│▔three
+~
+~
+== stale result dropped, current accepted
+'ts:' '2' 'seen:' '2'
+'after' 'old:' '2' '0| ' '3|{GitGutterDelete}▔' 'seen:' '2'
+'after' 'current:' '2' '0| ' '2|{GitGutterAdd}Y'
+ok   gutter dir while running
+ok   gutter dir after the session ends

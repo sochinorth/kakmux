@@ -1,0 +1,24 @@
+before
+%0 0 [self] client0
+%2 1 [self] client2
+%4 0 []
+%3 0 []
+%1 0 [other] client1
+'client0' 'client1' 'client2'
+after w from client2
+%0 0 client0
+%2 0 client2
+%4 1
+%3 0
+%1 0 client1
+after only
+%0 [self] client0 kak
+%4 []  sleep
+%3 []  sleep
+%1 [other] client1 kak
+@kakmux_weights "{\"%0,%1,%4\":1,\"%0\":1,\"%1\":1,\"%0,%4\":1,\"%4\":1}"
+'client0' 'client1'
+ok   client_list after split-only
+ok   debug
+ERR: split: needs tmux (:kakmux)
+ERR: split: needs tmux (:kakmux)

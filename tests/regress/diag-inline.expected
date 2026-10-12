@@ -1,0 +1,15 @@
+  1│ #include <stdio.h>
+  2│
+  3│ int main(void)
+  4│ {
+● 5│     int x = "str";   Incompatible pointer to integer conversion initializing 'int' with an expression of type 'char[4]'
+● 6│     foo(old, &tmp);   Call to undeclared function 'foo'; ISO C99 and later do not support implicit function declarations
+  7│     printf("%d\n", x)
+● 8│     return 0;   Expected ';' after expression (fix available)
+  9│ }
+~
+'5|6|error|Incompatible pointer to integer conversion initializing '\''int'\'' with an expression of type '\''char[4]'\''' '6|2|error|Call to undeclared function '\''foo'\''; ISO C99 and later do not support implicit function declarations' '6|6|error|Use of undeclared identifier '\''old'\''' '6|12|error|Use of undeclared identifier '\''tmp'\''' '8|2|error|Expected '\'';'\'' after expression (fix available)'
+ok   debug: no errors
+ok   line 5: dot and message
+ok   line 7: no dot
+ok   line 8: fix available

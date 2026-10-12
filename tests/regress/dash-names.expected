@@ -1,0 +1,13 @@
+== vsplit -dash.txt
+ok   split on -dash.txt
+== picker files action / buffers action commands
+'edit' '--' '-dash.txt' '->' '-dash.txt'
+'buffer' '--' '-dash.txt' '->' '-dash.txt'
+== :vsplit from a buffer named -dash.txt (init: buffer -- ...)
+ok   split of -dash.txt
+== changed-file-picker outside a repo
+ok   no picker dir left
+ERR: changed files: not in a git repository
+== :kakmux with tmux failing: handoff removed
+ok   handoff file removed
+ERR: kakmux: tmux failed

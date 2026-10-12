@@ -1,0 +1,10 @@
+== move between splits (tmux select-pane): no write
+ok   a.txt not written
+'modified:' 'true'
+== the terminal loses focus: written
+ok   a.txt written on focus-out
+== write fails (directory gone): reported
+auto-save: 1:2: 'write-all': @RUN/p/as/sub/b.txt: No such file or directory
+auto-save failed (see *debug*) <pad> a.txt │ 1:7
+== plain tmux (not kakmux): kak's FocusOut writes
+ok   plain tmux: written on pane change

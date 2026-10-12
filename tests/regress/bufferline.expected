@@ -1,0 +1,17 @@
+== bufferline, 2 buffers, on x
+@kak_bufferline " x.txt  y.txt "
+ok   status line on
+== after edit z.txt
+@kak_bufferline " x.txt  y.txt  z.txt "
+== z modified
+ok   z modified
+== split: client1 in the new pane; switch client0 between buffers and back
+@kak_bufferline " x.txt  y.txt  z.txt[+] "
+pane0 (should be z active):
+@kak_bufferline "#[in] x.txt #[in] y.txt #[ACTIVE] z.txt[+] #[default]"
+'sent:' '%1|y.txt|fg=#2c323c,bg=#61afef,underscore,us=#2c323c|fg=#5c6370,bg=#2c323c|false:x.txt false:y.txt true:z.txt' '%0|z.txt|fg=#2c323c,bg=#61afef,underscore,us=#2c323c|fg=#5c6370,bg=#2c323c|false:x.txt false:y.txt true:z.txt'
+== status line dimming
+'c1' 'dimmed' 'true' 'unfocused:' 'client1'
+'c0' 'dimmed' 'false'
+ok   terminal focus out: c0 dimmed
+ok   focus in: c0 not dimmed

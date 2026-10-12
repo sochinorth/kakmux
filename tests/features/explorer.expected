@@ -1,0 +1,20 @@
+== <space>e (kakmux, 160 cols)
+%1 1 40 broot 1 @RUN/p/proj
+%0 0 119 kak  @RUN/p/proj
+ok   broot pane, 40 columns, focused
+== <space>e again: focus
+ok   broot focused again
+%0 1 160 kak  @RUN/p/proj
+== <space>E (buffer dir)
+%2 1 40 broot 1 @RUN/p/proj/sub
+%0 0 119 kak  @RUN/p/proj
+ok   broot in sub
+ok   debug
+== plain tmux
+%1 1 40 broot
+%0 0 119 kak
+== no tmux
+ok   refused
+== kakbr: sidebar focused
+ok   outer sidebar pane focused
+ok   no explorer in the kakmux

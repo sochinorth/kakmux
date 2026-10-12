@@ -1,0 +1,28 @@
+== 1: point.c open+clean, util.c open+dirty (unrelated edit), README has the word
+main.c: false  point.c: false  util.c: true  point.h: closed  README.md: closed
+disk:
+
+main.c: true  point.c: true  util.c: true  point.h: true  README.md: closed
+renamed: 6 edits in 4 files (unsaved: :wa writes them)
+'*debug*' 'main.c' 'point.c' 'util.c' 'point.h'
+ok   util.c keeps its dirty line, has the new name
+== write in point.c buffer
+ M point.c
+== 2: rename on a keyword (no rename possible); opened buffers closed after the 20s timer
+'*debug*' 'main.c' 'point.c' 'util.c' 'point.h' 'armed:' 'yes'
+
+'*debug*' 'main.c' 'point.c' 'util.c' 'point.h' 'armed:' ''
+== 3: workspace edit (code action path) into an unopened file, held
+'*debug*' 'main.c' 'point.c' 'util.c'
+ M main.c  M point.c  M point.h  M util.c
+point.h: true
+ok   point.h buffer has the edit
+applied: 1 edit in 1 file (unsaved: :wa writes them)
+== 4: clangd quickfix (undeclared identifier typo), sync code action
+ M main.c  M point.c  M point.h  M util.c
+main.c: true
+ok   main.c fixed
+applied: 1 edit in 1 file
+== debug
+LSP: ERRO Error response from server clangd: Failure { jsonrpc: Some(V2), error: Error { code: ServerError(-32001), message: "Cannot rename symbol: there is no symbol at the given location", data: None }, id: Num(2) }
+LSP: ERRO language server clangd error: 'Cannot rename symbol: there is no symbol at the given location'

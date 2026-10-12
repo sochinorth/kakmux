@@ -1,0 +1,9 @@
+<pad> t.c │ ● 5 │ 1:1
+<pad> w.c │ ● 1 │ 1:1
+ok   strip done once (disarmed)
+ok   kakmux: no client@[session]
+<pad> proj/t.c │ ● 5 │ 1:1 - client0@[@P-p]
+ok   plain kak: client@[session] kept
+== customised format left alone
+<pad> custom @@P-o2
+ok   custom format kept

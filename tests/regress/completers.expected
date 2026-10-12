@@ -1,0 +1,8 @@
+'start:' 'option=lsp_completions' 'filename' 'word=all'
+'insert,' 'nothing' 'typed:'
+'after' 'typing:' 'option=lsp_completions' 'filename' 'word=all'
+'global' 'changed' '(as' 'lsp-disable):' 'word=all'
+== window with its own value
+'insert:'
+ok   own value back after insert
+'global' 'changed:' 'filename' 'word=buffer' '(own' 'kept)'

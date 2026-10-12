@@ -1,0 +1,28 @@
+== t.c line_diags (n, state, pending):
+'5' ''
+== misroute repro: stale + request, then switch to *debug* at once
+'*debug*' 'pending:' 'pickers:'
+'t.c:' 'n:' '5' 'state:' '' 'pending:' 'pickers:'
+== background buffer: open w.c, leave before clangd publishes, come back
+'now' 'in' 't.c'
+w.c while hidden: 0 stale 1
+'w.c' 'shown:' 'n:' '1' 'state:' '' '1|22|error|Use of undeclared identifier '\''zz'\''' 'pending:'
+● 1│ int w(void) { return zz; }
+  1│ <pad> └─Use of undeclared identifier 'zz'
+~
+ok   w.c inline line
+== diagnostics-picker in *scratch* (no LSP): entry cleaned
+'only:' 'client0='
+== diagnostics-picker in t.c (no client attached: no popup)
+'only:' 'pickers:' 'pending:'
+'later' 'only:'
+  1│ #include <stdio.h>
+  2│
+  3│ int main(void)
+  4│ {
+● 5│     int x = "str";   Incompatible pointer to integer conversion initializing 'int' with an expression of type 'char[4]'
+● 6│     foo(old, &tmp);   Call to undeclared function 'foo'; ISO C99 and later do not support implicit function declarations
+  7│     printf("%d\n", x)
+● 8│     return 0;   Expected ';' after expression (fix available)
+  9│ }
+LSP: ERRO not supported in scratch buffers

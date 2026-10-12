@@ -1,0 +1,40 @@
+╭─ commands ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ > <pad> N/N │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│ ▌ buffer-previous (bp bprev)      gp                 switch to the previous buffer. <pad> ││
+│ ▌ quit (q) <pad> <c-w>q <c-w><c-q>  exit Kakoune, use quit! to force quitting even if there is some <pad> ││
+│ ▌ buffer-next (bn bnext)          gn                 switch to the next buffer. <pad> ││
+│ ▌ file-picker <pad> <space>f           file-picker [-cwd]: fuzzy-pick a file under the buffer's workspace root (or kak's cwd) (tmux popup)     │
+│ ▌ lsp-references                  gr                 Open buffer with symbol references <pad> │
+│ ▌ lsp-hover <pad> <space>k           Request hover info for the main cursor position <pad> │
+│ ▌ diagnostics-picker              <space>d           diagnostics-picker [-workspace]: this file's diagnostics (or every file's) in a picker                  │
+│ ▌ workspace-symbol-picker         <space>S           search the workspace's symbols (picker) <pad> │
+│ ▌ symbol-picker                   <space>s           this file's symbols in a picker <pad> │
+│ ▌ lsp-rename-prompt               <space>r           Rename symbol under the main cursor (prompt for a new name) <pad> │
+│ ▌ changed-file-picker             <space>g           files changed since HEAD in the workspace's repository (git, picker) <pad> │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ enter run/prompt
+│ > vsplit <pad> N/N │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│ ▌ vsplit (vs) <pad> <c-w>v <c-w><c-v>  vsplit [<ratio>] [<file>]: split side by side, this one <ratio>% (1-99) of t·· │
+│ ▌ :splits-even <pad> <c-w>=             even out all splits <pad> │
+│ ▌ :tmux-here resize-pane -Z -t %val{client_env_TMUX_PANE}  <c-w>z             zoom this split (toggle) <pad> │
+ok   config-reload ran
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│ ▌ lsp-rename-prompt                  <space>r   Rename symbol under the main cursor (prompt for a new name) <pad> │
+│ ▌ lsp-rename <pad> lsp-rename <new-name>: rename symbol under the main cursor <pad> │
+ok   lsp-rename-prompt prompts
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│ ▌ :clipboard-yank -main      <space>Y  yank main selection to clipboard <pad> │
+│ ▌ lsp-code-actions-sync                lsp-code-actions-sync [<code-action-kinds>...]: Perform the matching code action for the main cursor position, bloc·· │
+ok   clipboard-yank -main ran
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│ ▌ :surround-add <pad> ms        surround add <pad> │
+│ ▌ lsp-object <pad> lsp-object [<symbol-kinds>...]: select adjacent or surrounding symbol of a type in <symbol-kinds>, or of a·· │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│ ▌ :split-focus -L <pad> <c-w>h       focus left <pad> ││
+│ ▌ :split-focus -L <pad> <c-w><left>  focus left <pad> ││
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│ ▌ tree-sitter-nav <pad> │
+│ ▌ :tree-sitter-nav '"parent"' <pad> <space>ts       select parent <pad> │
+│ ▌ :tree-sitter-nav '"first_child"' <pad> <space>tt       select first child <pad> │

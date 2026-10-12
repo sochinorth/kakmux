@@ -1,0 +1,18 @@
+'*goto*' 'ft:' 'lsp-document-symbol' 'buffile:' '@RUN/p/proj/t.c' 'path:' './' '%/' '/usr/include' '@RUN/p/proj'
+  1│ t.c
+  2│ %:3:5: main (Function)
+~
+~
+ok   <ret> jumps to main
+== tmux: symbol picker, t.c's path untouched
+dir @RUN/tmp/kak-picker.@:
+cols
+faces
+last
+list
+root
+rows
+title
+type
+wsroot
+'t.c' 'path:' './' '%/' '/usr/include' 'buffile:' '' 'pickers:' 'client0'

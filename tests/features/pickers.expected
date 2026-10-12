@@ -1,0 +1,30 @@
+╭─ files · proj ────────────────────────────────────────────────
+│ > <pad> 10/10
+│ ──────────────────────────────────────────────────────────────
+│ ▌ Makefile
+│ ▌ compile_commands.json
+│ ▌ compile_flags.txt
+ok   file picked
+╭─ files · sub ─────────────────────────────────────────────────
+│ > <pad> 2/2
+│ ──────────────────────────────────────────────────────────────
+│ ▌ deep/a.txt
+╭─ global search · proj ────────────────────────────────────────────────
+│ / point_dist2 <pad> 5/5
+│ ──────────────────────────────────────────────────────────────────────
+│ ▌ main.c:12    printf("dist2 = %d\n", point_dist2(a, b));
+│ ▌ point.c:4    int point_dist2(struct point a, struct point b)
+│ ▌ point.h:9    int point_dist2(struct point a, struct point b);
+│ ▌ sub/s.txt:1  point_dist2 here
+│ ▌ util.c:6     return point_dist2(p, p) + 2 * v;
+╭─ changed files ───────────────────────────────────────────────
+│ > <pad> 3/3
+│ ──────────────────────────────────────────────────────────────
+│ ▌ ~ point.c
+╭─ locations ───────────────────────────────────────────────────────────
+│ > <pad> 4/4
+│ ──────────────────────────────────────────────────────────────────────
+│ ▌ main.c:12  printf("dist2 = %d\n", point_dist2(a, b));
+│ ▌ point.c:5  int point_dist2(struct point a, struct point b)
+│ ▌ point.h:9  int point_dist2(struct point a, struct point b);
+│ ▌ util.c:6   return point_dist2(p, p) + 2 * v;

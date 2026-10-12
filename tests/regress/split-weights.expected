@@ -1,0 +1,6 @@
+@kakmux_weights "{\"%0,%1\":1,\"%0\":30,\"%1\":70}"
+ok   pane widths 30/70
+%0 [self] client0
+weights:
+@kakmux_weights "{\"%0\":1}"
+'client0'

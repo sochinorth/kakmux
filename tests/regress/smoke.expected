@@ -1,0 +1,40 @@
+== file picker: <space>f point.c
+ok   file picker
+== buffer picker: <space>b main
+ok   buffer picker
+== gd on point_dist2 (main.c -> point.c definition)
+ok   gd
+== gr from the definition: references picker
+ok   references picker: 4 locations
+ok   gr + enter: a reference
+== diagnostics: an error, inline lines, ]d
+'1' ' ● 1'
+ok   ]d
+14:●14│▍return zz;}
+15: 14│        └─Use of undeclared identifier 'zz'
+44: <pad> ⎇ trunk │ main.c [+] │ ● 1 │ 14:8
+== git gutter, ]g
+ok   ]g: the hunk, lines 13-14
+'13' '0| ' '13|{GitGutterModify}▍' '14|{GitGutterModify}▍'
+== surround: ms( on a word, mr([ , md[
+ok   ms(
+ok   mr([
+ok   md[
+== clipboard: <space>y then <space>R (copy/paste via a file)
+ok   yank -> clip
+ok   paste R
+== splits: :vs, :hs, <c-w> l/h/w/o
+%0 0 client0 80x22
+%2 1 client2 80x21
+%1 0 client1 79x44
+ok   <c-w>h
+ok   <c-w>l
+ok   <c-w>w
+ok   <c-w>o
+== bufferline
+@kak_bufferline " main.c[+]  point.c "
+== auto-save on terminal focus-out
+ok   before focus-out: clean on disk
+ok   after focus-out: written
+ok   modified
+== debug

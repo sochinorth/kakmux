@@ -1,0 +1,45 @@
+  1│ #atclude <ardio.h>
+  2│ #apclude "anint.h"
+  3│
+  4│ alt ajil_twice(aht v);
+  5│
+  6│ aft adin(abid)
+  7│ {
+  8│ │   acruct aeint a = { 1, 2 };
+  9│ │   agruct aiint b = { 4, 6 };
+ 10│ │   akruct amint c = aoint_sum(a, b);
+ 11│ │   aqint_print("c", c);
+ 12│ │   asintf("aust2 = %d\n", avint_dist2(a, b));
+  6│ aft adin(abid)
+  7│ {
+  8│ │   acruct aeint a = { 1, 2 };
+  9│ │   agruct aiint b = { 4, 6 };
+ 10│ │   akruct amint c = aoint_sum(a, b);
+'void' '6.10,6.13'
+  6│ int main(void)
+  7│ {
+  8│ │   struct point a = { 1, 2 };
+ok   picked ab: void
+  6│ int main(void)
+  7│ {
+  8│ │   struct point a = { 1, 2 };
+'void' '6.10,6.13'
+== extend
+  8│ │   struct acint a = { 1, 2 };
+  9│ │   aeruct agint b = { 4, 6 };
+'struct point a = { 1, 2 };
+	struct point b = { 4, 6 };
+	struct point c = point_sum(a, b);
+	point_print("c", c);
+	printf("dist2 = %d\n", point_dist2(a, b));
+	printf("twice = %d\n", util_twice(c.x));
+	return' '8.2,14.7'
+ok   extended to aa
+== grep buffer keeps <ret>
+'*grep*' 'grep'
+ok   <ret> in *grep* jumps
+== lsp lists keep <ret> (no tmux)
+'*goto*' 'lsp-goto'
+ok   <ret> in *goto* jumps
+'1'
+'1' '12.25,12.35'

@@ -1,0 +1,13 @@
+sp ace.txt: '0| ' '2|{GitGutterModify}▍'
+é.txt: '0| ' '1|{GitGutterAdd}▍'
+crlf.txt: '0| ' '2|{GitGutterDelete}▔'
+ok   untracked: no flags
+│
+│ ▌ + 50%d #{x}.txt
+│ ▌ + it's.txt
+│ ▌ + new "q".txt
+│ ▌ ~ crlf.txt
+│ ▌ ~ sp ace.txt
+│ ▌ ~ é.txt
+ok   picked from the changed files
+ok   debug
