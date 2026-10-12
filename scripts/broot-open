@@ -3,7 +3,7 @@
 #   Enter        verbs.hjson runs this with broot's terminal
 #   double-click broot hard-wires this to the system opener; this script is also
 #                installed as wslview/xdg-open in a dir only broot has on PATH
-#                (see broot() in .zshrc and kakbr-sidebar), with no terminal
+#                (see broot() in shell/kakmux.zsh and kakbr-sidebar), with no terminal
 #
 # kakbr's sidebar (KAKBR_SESSION, its kak session, set): the kak client focused
 # last gets the file, and kak the focus.

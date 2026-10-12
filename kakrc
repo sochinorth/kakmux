@@ -3394,9 +3394,9 @@ hook -group kakrc global FocusIn    .* bufferline-idle
 # :kakmux moves this client into a kakmux: it opens a client on the same session
 # in a new, detached kakmux (its own tmux server, as each kakmux has), which
 # quits this one once connected (quitting first could take the server down
-# with the last client). kak (the .zshrc wrapper that set KAKMUX_HANDOFF) then
-# attaches it in this terminal, or inside another tmux, nested in this pane
-# (see ~/.local/bin/kakmux).
+# with the last client). kak (shell/kakmux.zsh's wrapper, which set
+# KAKMUX_HANDOFF) then attaches it in this terminal, or inside another tmux,
+# nested in this pane (see ~/.local/bin/kakmux).
 define-command -override kakmux -docstring 'continue this session inside kakmux (tmux bufferline)' %{
 	evaluate-commands %sh{
 		case ${kak_client_env_TMUX%%,*} in */kakmux-*)
