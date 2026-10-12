@@ -167,7 +167,8 @@ evaluate-commands %sh{
 
 # Faces this kakrc draws with, for colour schemes that don't set them: the
 # hover/completion docs kak-lsp writes in markup, the status line's mode,
-# git and diagnostic counts, the git gutter, the pickers' background (a linked
+# git and diagnostic counts, the git gutter, the inline diagnostics' lines
+# below the cursor's, the pickers' background (a linked
 # face reads as default in the faces dump, so kak-picker falls back to
 # MenuBackground's colour). Kept beside the plugins' defaults above.
 declare-option -hidden str kakrc_faces
@@ -197,6 +198,11 @@ set-face global GitGutterAdd green
 set-face global GitGutterModify yellow
 set-face global GitGutterDelete red
 set-face global IndentGuide Whitespace
+set-face global InlineDiagnosticDefault Default
+set-face global InlineDiagnosticError InlayDiagnosticError
+set-face global InlineDiagnosticWarning InlayDiagnosticWarning
+set-face global InlineDiagnosticInfo InlayDiagnosticInfo
+set-face global InlineDiagnosticHint InlayDiagnosticHint
 set-face global IndentGuideActive +d@Default
 set-face global PickerBackground MenuBackground
 }
@@ -841,6 +847,20 @@ define-command -override -hidden lsp-execute-command-request -params 3..4 %{
 # changes line, so it's kept to a shell per list caught (and drawn in the
 # same go) and per move onto a line with diagnostics; publishes with none,
 # and moves onto lines without, need none.
+# The lines below are a replace-ranges insertion (Kakoune has no other way
+# to add lines), hung just past the line's newline (the column after it,
+# an empty range): inserted before the newline instead, they'd push it,
+# and the cursor at the line's end on it, to the end of the last of them,
+# and whatever is typed there would show after them until the next list.
+# Each edit hangs them again at the new end (see line-diags-follow), as
+# Kakoune doesn't move them along reliably. Hung at the next line's start
+# instead, they'd take that line's number and gutter flags. Past the
+# newline they count as under the cursor at the line's end (its range
+# reaches the next line), and a selection over the line, and take their
+# faces: theirs (InlineDiagnostic*) are final in onedark (+F, colours
+# spelt out), and its end-of-line cursor faces aren't (a final cursor face
+# would still win); other colour schemes get the end-of-line messages'
+# faces, and the cursor's there.
 
 declare-option -docstring 'severities shown below the cursor''s line' \
 	str-list inline_diagnostics_severities error warning
@@ -850,11 +870,15 @@ declare-option -hidden str-list line_diags
 declare-option -hidden int line_diags_n 0
 declare-option -hidden str-list line_diags_lines
 declare-option -hidden str line_diags_state
-# window: what's drawn, whether lines below are, for which cursor line
+# window: what's drawn (the lines below, their text, the pad: see
+# line-diags-hang), whether lines below are, for which cursor line
 declare-option -hidden range-specs line_diags_view
+declare-option -hidden str line_diags_spec
+declare-option -hidden range-specs line_diags_pad
 declare-option -hidden line-specs line_diags_eol
 declare-option -hidden int line_diags_drawn 0
 declare-option -hidden int line_diags_seen 0
+declare-option -hidden int line_diags_at
 # the lists asked for and not back yet, as "client=bufname", one per list:
 # kak-lsp answers in the client that asked, whatever buffer it shows by then
 declare-option -hidden str-list line_diags_pending
@@ -865,6 +889,11 @@ declare-option -hidden int line_diags_eolcol
 declare-option -hidden str line_diags_text
 declare-option -hidden str line_diags_size
 declare-option -hidden str-list line_diags_cmp
+# (the pad first: the first time, line-diags goes again after it)
+try %{
+	add-highlighter global/line-diags-pad replace-ranges line_diags_pad
+	try %{ remove-highlighter global/line-diags }
+}
 add-highlighter -override global/line-diags replace-ranges line_diags_view
 add-highlighter -override global/line-diags-eol flag-lines -after Default line_diags_eol
 
@@ -1027,8 +1056,8 @@ declare-option -hidden str line_diags_sh %{
 	}
 
 	# draw COLUMN|SEVERITY|MESSAGE...: rightmost first, their screen
-	# columns in $dcols, the line's end's in $eolcol, its last position in
-	# $lineend
+	# columns in $dcols, the line's end's in $eolcol, its last position
+	# (the newline) in $lineend
 	draw() {
 		# markup text (\ and the left brace escaped), then a range-specs
 		# element (\ and | escaped again), in $r. (The brace comes from
@@ -1042,8 +1071,8 @@ declare-option -hidden str line_diags_sh %{
 		for e; do
 			sev=${e#*|} sev=${sev%%|*}
 			case $sev in
-			error) f=InlayDiagnosticError ;; warning) f=InlayDiagnosticWarning ;;
-			info) f=InlayDiagnosticInfo ;; *) f=InlayDiagnosticHint ;;
+			error) f=InlineDiagnosticError ;; warning) f=InlineDiagnosticWarning ;;
+			info) f=InlineDiagnosticInfo ;; *) f=InlineDiagnosticHint ;;
 			esac
 			eval "f_$i=\$f m_$i=\${e#*|*|}"
 			i=$((i + 1))
@@ -1064,8 +1093,7 @@ declare-option -hidden str line_diags_sh %{
 			printf '%s\n' "set-option window line_diags_eol $eol"
 		fi
 		if [ "$n" -eq 0 ]; then
-			echo 'set-option window line_diags_view %val{timestamp}'
-			echo 'set-option window line_diags_drawn 0'
+			echo line-diags-unhang
 			return
 		fi
 
@@ -1077,12 +1105,12 @@ declare-option -hidden str line_diags_sh %{
 			while [ "$j" -gt "$1" ]; do
 				eval "pj=\$p_$j fj=\$f_$j"
 				if [ "$pj" -lt "$2" ] && [ "$pj" -ge "$at" ]; then
-					lead="$lead{Default}"; blanks $((pj - at))
+					lead="$lead{InlineDiagnosticDefault}"; blanks $((pj - at))
 					lead="$lead{$fj}│"; at=$((pj + 1))
 				fi
 				j=$((j - 1))
 			done
-			lead="$lead{Default}"; blanks $(($2 - at))
+			lead="$lead{InlineDiagnosticDefault}"; blanks $(($2 - at))
 		}
 		# text width: the window less the gutter (diagnostic flags, line
 		# numbers, │, the git gutter's column) and the end-of-line mark
@@ -1107,8 +1135,7 @@ declare-option -hidden str line_diags_sh %{
 			i=0; while [ "$i" -lt "$n" ]; do eval "p_$i=0"; i=$((i + 1)); done
 		fi
 		if [ "$width" -lt 12 ]; then
-			echo 'set-option window line_diags_view %val{timestamp}'
-			echo 'set-option window line_diags_drawn 0'
+			echo line-diags-unhang
 			return
 		fi
 		text= i=0
@@ -1143,15 +1170,14 @@ declare-option -hidden str line_diags_sh %{
 $lead{$f}└─$r"
 				else
 					text="$text
-$lead{Default}  {$f}$r"
+$lead{InlineDiagnosticDefault}  {$f}$r"
 				fi
 				first=
 			done
 			i=$((i + 1))
 		done
-		double "'" "$lineend+0|$text"
-		printf "set-option window line_diags_view %%val{timestamp} '%s'\n" "$r"
-		echo 'set-option window line_diags_drawn 1'
+		double "'" "$text"
+		printf "line-diags-hang %s '%s'\n" "${lineend%.*}.$((${lineend#*.} + 1))" "$r"
 	}
 	nl='
 '
@@ -1339,6 +1365,44 @@ define-command -override -hidden -params .. line-diags-draw %{
 	}
 }
 
+# line-diags-hang AT TEXT: the lines below (TEXT, as in a range-specs
+# value) hung at AT, the column past the cursor line's newline, see above.
+# Lines a replace-ranges insertion makes count as the line of the first
+# buffer position after the insertion on its screen line, and with none
+# (past a newline), as line 1: its number, its flags. So a blank (the pad)
+# goes there first (its own highlighter, before), and each line below gets
+# it in turn, ending on the last.
+define-command -override -hidden -params 2 line-diags-hang %{
+	set-option window line_diags_spec %arg{2}
+	set-option window line_diags_pad %val{timestamp} "%arg{1}+0|{InlineDiagnosticDefault} "
+	set-option window line_diags_view %val{timestamp} "%arg{1}+0|%arg{2}"
+	set-option window line_diags_drawn 1
+}
+define-command -override -hidden line-diags-unhang %{
+	set-option window line_diags_pad %val{timestamp}
+	set-option window line_diags_view %val{timestamp}
+	set-option window line_diags_drawn 0
+}
+# after an edit within lines (see decorations through edits), lines below
+# the cursor's line hung again past its newline (Kakoune's own update of
+# an insertion past a newline can leave it where it was as the line grows,
+# with what's typed shown after it)
+define-command -override -hidden line-diags-follow %{
+	try %{
+		evaluate-commands "line-diags-clear-%opt{line_diags_drawn}"
+	} catch %{
+		set-option window line_diags_at %opt{line_diags_seen}
+		set-option -remove window line_diags_at %val{cursor_line}
+		evaluate-commands "line-diags-same-%opt{line_diags_at}"
+		evaluate-commands -draft %{
+			execute-keys ',;x'
+			set-option window line_diags_at %val{cursor_column}
+			set-option -add window line_diags_at 1
+			line-diags-hang "%val{cursor_line}.%opt{line_diags_at}" %opt{line_diags_spec}
+		}
+	}
+}
+
 # Redraw when the cursor changes line. Done without a shell otherwise: a
 # no-op command per unchanged line (line_diags_seen - cursor_line = 0), per
 # buffer with no diagnostics and nothing drawn, and per line without any
@@ -1364,9 +1428,8 @@ define-command -override -hidden line-diags-idle %{
 				set-option window line_diags_seen %val{cursor_line}
 				# (as line-diags-draw leaves it with none to draw)
 				try %{ evaluate-commands "line-diags-clear-%opt{line_diags_drawn}" } catch %{
-					set-option window line_diags_view %val{timestamp}
+					line-diags-unhang
 					set-option window line_diags_eol %opt{lsp_inlay_diagnostics}
-					set-option window line_diags_drawn 0
 				}
 			} catch %{
 				line-diags-render
@@ -2798,10 +2861,15 @@ define-command -override -hidden indent-guides-render %{
 #   only ones known without a shell (its end-of-line message comes back
 #   with the server's next list);
 # - in insert mode, the indent guides are checked now (as InsertIdle does:
-#   a shell only when what they depend on changed), and, the line count
-#   changed, the inline diagnostics: the whitespace c-indent strips from a
-#   line as <ret> leaves it collapses the guides drawn over it onto its
-#   newline, joining two lines on screen until keys stop.
+#   a shell only when what they depend on changed): the whitespace
+#   c-indent strips from a line as <ret> leaves it collapses the guides
+#   drawn over it onto its newline, joining two lines on screen until keys
+#   stop;
+# - the inline diagnostics' lines below follow the cursor line's end, and
+#   with lines added or gone, are drawn again (or not) for the cursor's
+#   line now: left hanging where a deleted line was, Kakoune draws them
+#   over the next line's first character, and one left at a line's start
+#   (a line break first) crashes it: an empty screen line, wrapped.
 # (NormalKey also runs for the keys of execute-keys in hooks: a check of
 # the timestamp each, nothing more.)
 # window: the timestamp and line count after the last key, the lines this
@@ -2856,8 +2924,19 @@ define-command -override -hidden decor-key-normal %{
 	set-option -remove window decor_moved %opt{decor_lines}
 	try %{
 		evaluate-commands "decor-same-%opt{decor_moved}"
-		decor-keep-all
+		set-option window decor_kind inline
+	} catch %{
+		set-option window decor_kind lines
 	}
+	evaluate-commands "decor-%opt{decor_kind}-normal"
+}
+define-command -override -hidden decor-inline-normal %{
+	decor-keep-all
+	try %{ line-diags-follow }
+}
+define-command -override -hidden decor-lines-normal %{
+	set-option window line_diags_seen 0
+	line-diags-idle
 }
 define-command -override -hidden decor-keep-all %{
 	decor-keep buffer git_gutter_flags
@@ -2867,6 +2946,7 @@ define-command -override -hidden decor-keep-all %{
 define-command -override -hidden decor-inline-insert %{
 	decor-keep-all
 	try %{ decor-git-mark Modify }
+	try %{ line-diags-follow }
 }
 # lines opened (o O <ret>) or joined: the old flags kept first (if stamped
 # as of the last key: their line numbers are the old ones), then Kakoune's
@@ -2887,6 +2967,7 @@ define-command -override -hidden decor-lines-insert %{
 	try %{ update-option buffer git_gutter_flags }
 	try %{ update-option buffer lsp_diagnostic_lines }
 	try %{ evaluate-commands "decor-moved-%opt{decor_moved}" }
+	set-option window line_diags_seen 0
 	line-diags-idle
 }
 define-command -override -hidden decor-moved-1 %{
