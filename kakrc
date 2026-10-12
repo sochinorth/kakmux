@@ -2010,6 +2010,47 @@ try %{
 	map global tree-sitter i ':ts-select-all children<ret>' -docstring 'select all children'
 }
 
+# --- search: smart case --------------------------------------------------------
+# Helix's search.smart-case: / ? <a-/> <a-?> are case-insensitive unless the
+# pattern has an uppercase letter. Kakoune's search prompt can't be read
+# while typing, so the prompt opens with (?i) in it, which goes as soon as an
+# uppercase letter is typed (a RawKey hook while it's open; a key run from a
+# hook goes to the prompt). It stays in the pattern otherwise, and so in the
+# search history and the / register, for n/N alike. Typing, then deleting
+# back, is followed; any other edit of the prompt (cursor keys, history,
+# completion, <c-r>) leaves it as it is from then on: (?i) or not, by hand.
+# Kakoune's own incremental search, history and n/N are untouched.
+map global normal /     ':smart-case-arm<ret>/(?i)'
+map global normal ?     ':smart-case-arm<ret>?(?i)'
+map global normal <a-/> ':smart-case-arm<ret><a-/>(?i)'
+map global normal <a-?> ':smart-case-arm<ret><a-?>(?i)'
+# the characters typed after (?i), less those deleted
+declare-option -hidden int smart_case_typed
+define-command -override -hidden smart-case-typed--1 smart-case-disarm
+define-command -override -hidden smart-case-disarm %{ remove-hooks window smart-case }
+# (RawKey for the key that ran this comes after it: the hooks start with the
+# next one)
+define-command -override -hidden smart-case-arm %{
+	remove-hooks window smart-case
+	hook -once -group smart-case window RawKey .* smart-case-arm-now
+	hook -group smart-case window ModeChange pop:prompt:.* smart-case-disarm
+}
+define-command -override -hidden smart-case-arm-now %{
+	set-option window smart_case_typed 0
+	hook -group smart-case window RawKey [A-Z] %{
+		smart-case-disarm
+		execute-keys '<home><del><del><del><del><end>'
+	}
+	hook -group smart-case window RawKey '[^A-Z<]|<(?:space|lt|gt|minus|plus|semicolon|percent|dquote|quote|backtick|backslash|pipe)>' %{
+		set-option -add window smart_case_typed 1
+	}
+	hook -group smart-case window RawKey <backspace> %{
+		set-option -remove window smart_case_typed 1
+		try %{ evaluate-commands "smart-case-typed-%opt{smart_case_typed}" }
+	}
+	hook -group smart-case window RawKey '<(?!space>)(?!lt>)(?!gt>)(?!minus>)(?!plus>)(?!semicolon>)(?!percent>)(?!dquote>)(?!quote>)(?!backtick>)(?!backslash>)(?!pipe>)(?!backspace>)(?!ret>)(?!esc>).+>' smart-case-disarm
+}
+
 # --- bufferline (tmux) --------------------------------------------------------
 # Kakoune can't draw a bufferline itself, so each client publishes its buffer
 # list to its tmux pane as @kak_bufferline, which kakmux.conf draws as the
