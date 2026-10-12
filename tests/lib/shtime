@@ -1,0 +1,8 @@
+#!/bin/sh
+# shtime: timing KAKOUNE_POSIX_SHELL. Microseconds per shell and the script's
+# start, in $KM_SHTIME.
+t0=$(date +%s%N)
+/bin/sh "$@"; st=$?
+t1=$(date +%s%N)
+printf "%6d %s\n" $(( (t1 - t0) / 1000 )) "$(printf %s "$2" | tr "\n\t" "  " | tr -s ' ' | cut -c1-110)" >> "${KM_SHTIME:?}"
+exit $st

@@ -1,0 +1,3 @@
+#!/bin/sh
+# a tmux that always fails (:kakmux error path)
+exit 1
