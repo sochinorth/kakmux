@@ -2,8 +2,10 @@
 # exactly; user mappings show (and still do after config-reload)
 # golden
 . "$(dirname "$0")/../lib/h.sh"
-# (the entry count changes with every command added, here or in a plugin)
-pcap() { tm "$1" capture-pane -p -t main:picker 2>/dev/null | sed -E 's#[0-9]+/[0-9]+ │#N/N │#'; }
+# (the entry count changes with every command added, here or in a plugin;
+# column widths follow the widest entry on screen, and fzf truncates long
+# docs at different points with them: blank runs squeezed, lines cut at 80)
+pcap() { tm "$1" capture-pane -p -t main:picker 2>/dev/null | sed -E 's#[0-9]+/[0-9]+ │#N/N │#; s/ {2,}/  /g; s/^(.{80}).+/\1…/'; }
 need fzf
 P=$R/p/proj; mkproj "$P"
 CWD=$P WAIT=2 start kakmux pal main.c

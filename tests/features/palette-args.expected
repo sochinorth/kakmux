@@ -1,11 +1,11 @@
-│ ▌ colorscheme  load named colorscheme <pad> │
+│ ▌ colorscheme  load named colorscheme  │
 ok   colorscheme prompts
-│ ▌ lsp-rename-prompt    <space>r   Rename symbol under the main cursor (prompt for a new name) <pad> │
+│ ▌ lsp-rename-prompt  <space>r  Rename symbol under the main cursor (prompt for…
 New name: include
-│ ▌ :tree-sitter-nav '"parent"' <pad> <space>ts   select parent <pad> │
-│ ▌ :surround-add                  ms         surround add <pad> ││
-│ ▌ :clipboard-yank -main          <space>Y   yank main selection to clipboard <pad> ││
-│ ▌ :tmux-here resize-pane -Z -t %val{client_env_TMUX_PANE}  <c-w>z    zoom this split (toggle) <pad> │
-│ > zz test <pad> N/N │
-│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
-│ ▌ :echo zz <pad> <space>Z  zz test <pad> │
+│ ▌ :tree-sitter-nav '"parent"'  <space>ts  select parent  │
+│ ▌ :surround-add  ms  surround add  ││
+│ ▌ :clipboard-yank -main  <space>Y  yank main selection to clipboard  ││
+│ ▌ :tmux-here resize-pane -Z -t %val{client_env_TMUX_PANE}  <c-w>z  zoom this s…
+│ > zz test  N/N │
+│ ──────────────────────────────────────────────────────────────────────────────…
+│ ▌ :echo zz  <space>Z  zz test  │
