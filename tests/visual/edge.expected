@@ -1,0 +1,81 @@
+## dd
+ 11│ │   │   │   total += i;
+ 12│ │   │   } else {
+ 13│ │   │   │   total -= i;
+ 14│ │   │   }
+## dd-above
+●11│▍│   │   │   @H x;
+ 11│             └─Use of undeclared identifier '@H'
+ 12│ │   │   } else {
+ 13│ │   │   │   total -= i;
+## dd-below
+ 11│ │   │   │   total += i;
+●12│▍│   │   │   @H x;   Use of undeclared identifier '@H'
+ 13│ │   │   │   total -= i;
+ 14│ │   │   }
+## J
+ 11│ │   │   │   total += i;
+●12│▍│   │   │   @H x; } else {
+ 12│             └─Use of undeclared identifier '@H'
+ 13│ │   │   │   total -= i;
+## join-del
+ 11│ │   │   │   total += i;
+●12│▍│   │   │   @H x;     } else {
+ 12│             └─Use of undeclared identifier '@H'
+ 13│ │   │   │   total -= i;
+## join-bs
+ 11│ │   │   │   total += i;
+●12│▍│   │   │   @H x;   Use of undeclared identifier '@H'
+ 13│▍│   │   } else{
+ 14│ │   │   │   total -= i;
+## xc
+ 11│ │   │   │   total += i;
+ 12│ │   │   } else {
+ 13│ │   │   │   total -= i;
+ 14│ │   │   }
+## ret-eol
+ 11│ │   │   │   total += i;
+●12│▍│   │   │   @H x;   Use of undeclared identifier '@H'
+ 13│▍│   │
+ 14│ │   │   } else {
+## ret-mid
+ 11│ │   │   │   total += i;
+●12│▍│   │   │   @H   Use of undeclared identifier '@H'
+ 13│▍│   │   │   x;
+ 14│ │   │   } else {
+## o
+ 11│ │   │   │   total += i;
+●12│▍│   │   │   @H x;   Use of undeclared identifier '@H'
+ 13│▍│   │
+ 14│ │   │   } else {
+## O
+ 11│ │   │   │   total += i;
+ 12│▍│   │   │
+●13│▍│   │   │   @H x;   Use of undeclared identifier '@H'
+ 14│ │   │   } else {
+## undo
+ 11│ │   │   │   total += i;
+●12│▍│   │   │   @H x;zz
+ 12│             │          └─Use of undeclared identifier 'zz'
+ 12│             └─Use of undeclared identifier '@H'
+## paste-line
+ 11│ │   │   │   total += i;
+●12│▍│   │   │   @H x;   Use of undeclared identifier '@H'
+●13│▍│   │   │   @H x;
+ 13│             └─Use of undeclared identifier '@H'
+## ghGld
+ 11│ │   │   │   total += i;
+ 12│▍│   │
+ 13│ │   │   } else {
+ 14│ │   │   │   total -= i;
+## empty-line
+ 11│ │   │   │   total += i;
+ 12│ │   │   } else {
+ 13│ │   │   │   total -= i;
+ 14│ │   │   }
+## bs-all
+ 11│ │   │   │   total += i;
+ 12│ │   │   } else {
+ 13│ │   │   │   total -= i;
+ 14│ │   │   }
+ok   debug
