@@ -6,7 +6,8 @@
 # N.meta = cursor line + modified, N = contents). DIR is removed on exit.
 #
 #   KIND=buffers            the open buffers, most recent first
-#   KIND=files              files under the popup's cwd (kak's), via fd
+#   KIND=files              files under the popup's cwd (the buffer's
+#                           workspace root, or kak's cwd), via fd
 #   KIND=locations          a list of `path:line:column:text` lines: DIR/list,
 #                           paths from DIR/root, DIR/type = kak-lsp's kind of
 #                           list (lsp-goto, lsp-diagnostics, ...), DIR/title,
@@ -14,6 +15,8 @@
 #   KIND=grep               ripgrep under the cwd, as you type
 #   KIND=workspace-symbols  the language server's symbols, as you type
 #   KIND=changed            files changed since HEAD (git status)
+#   KIND=commands           every command and mapping (kakrc's command-palette)
+# Paths show from DIR/wsroot (the buffer's workspace root) when under it.
 #
 #   enter          open it
 #   ctrl-s/ctrl-v  open it in a new kak client in a split below / to the right
@@ -21,8 +24,13 @@
 #   ctrl-d         buffers: close it (refused when it has unsaved changes)
 #   alt-d          buffers: close it, discarding unsaved changes
 #
+# On closing, DIR (less the buffers' copies) is kept at the path in DIR/last
+# (one per session), with what was typed (query) and the cursor's place
+# (pos): kakrc's picker-resume (<space>') opens it again from there, the
+# list as it was for kak-lsp's lists, made afresh for the others.
+#
 # fzf calls back into this script as `kak-picker --legend|--list|--delete|
-# --grep|--wsym|--diff ...`.
+# --grep|--wsym|--diff|--save ...`.
 #
 # Everything up to fzf runs in the shell itself, no other processes (each one
 # costs a millisecond or two), so the popup comes up at once.
@@ -54,13 +62,15 @@ list_buffers() {
 	done
 }
 
-# format_locations ROOT TYPE ONLY: `path:line:column:text` lines (stdin) to
-# fzf items, `absolute path<TAB>line<TAB>column<TAB>shown`. TYPE is kak-lsp's
-# kind of list: diagnostics show their severity, document symbols ("%" for
-# the file named on the first line) their name first. ONLY keeps one file.
+# format_locations ROOT TYPE ONLY [WSROOT]: `path:line:column:text` lines
+# (stdin) to fzf items, `absolute path<TAB>line<TAB>column<TAB>shown`. TYPE is
+# kak-lsp's kind of list: diagnostics show their severity, document symbols
+# ("%" for the file named on the first line) their name first. ONLY keeps one
+# file. Paths show from WSROOT (else from ROOT as given; ~ for $HOME).
 # Colours come from the PICKER_* SGR sequences (set below, exported).
 format_locations() {
-	awk -v root="$1" -v type="$2" -v only="$3" -v dim="$PICKER_DIM" -v fg="$PICKER_FG" \
+	awk -v root="$1" -v type="$2" -v only="$3" -v ws="${4:+$4/}" -v home="${HOME:+$HOME/}" \
+		-v dim="$PICKER_DIM" -v fg="$PICKER_FG" \
 		-v err="$PICKER_ERROR" -v warn="$PICKER_WARNING" -v info="$PICKER_INFO" -v hint="$PICKER_HINT" '
 	type == "lsp-document-symbol" && NR == 1 { file = $0; next }
 	match($0, /^[^:]+:[0-9]+:[0-9]+:/) {
@@ -71,6 +81,8 @@ format_locations() {
 		abs = path ~ /^\// ? path : root "/" path
 		if (only != "" && abs != only) next
 		gsub(/\t/, "    ", text); sub(/^[ ]+/, "", text); sub(/[ \r]+$/, "", text)
+		if (ws != "" && substr(abs, 1, length(ws)) == ws) path = substr(abs, length(ws) + 1)
+		else if (path ~ /^\// && home != "" && substr(path, 1, length(home)) == home) path = "~/" substr(path, length(home) + 1)
 		loc = dim path ":" lc[1] fg
 		if (type == "lsp-diagnostics") {
 			# [severity][server][source][code] message; related locations
@@ -104,7 +116,8 @@ case $1 in
 	while [ ! -e "$out" ] && [ "$i" -lt 60 ]; do sleep 0.05; i=$((i + 1)); done
 	[ -e "$out" ] || exit 0
 	IFS= read -r root < "$out.root"
-	format_locations "$root" lsp-workspace-symbol '' < "$out"
+	ws=; [ -e "$dir/wsroot" ] && IFS= read -r ws < "$dir/wsroot"
+	format_locations "$root" lsp-workspace-symbol '' "$ws" < "$out"
 	rm -f -- "$out" "$out.root"
 	exit ;;
 --diff)     # FILE: its changes since HEAD (or all of it, if untracked)
@@ -117,6 +130,144 @@ case $1 in
 	else
 		bat --color=always --style=numbers -- "$2"
 	fi
+	exit ;;
+--parse)    # CONFIG RUNTIME PLUGINRC: kak commands that cache the command
+            # palette's list (kakrc's palette-load), from the files that
+            # define commands: Kakoune's own (its docs), the autoloaded
+            # scripts, the plugins' (PLUGINRC, as they loaded) and the kakrc
+	config=$2 runtime=$3
+	auto=$config/autoload; [ -d "$auto" ] || auto=$runtime/autoload
+	nl='
+'
+	IFS=$nl
+	set -- "$runtime/doc/commands.asciidoc" $(find -L "$auto" -type f -name '*.kak' 2>/dev/null | sort) "$4" "$config/kakrc"
+	unset IFS
+	LC_ALL=C awk '
+	function q(t) { gsub(/\047/, "\047\047", t); return "\047" t "\047" }
+	function firstline(t) {
+		sub(/^[ \t\n]+/, "", t); sub(/\n.*/, "", t); gsub(/\t/, " ", t); sub(/[ ]+$/, "", t)
+		return t
+	}
+	# A Kakoune command line, read from P in T (more lines of the file
+	# added as needed): whitespace, then one word or quoted string
+	function more() { if (li < n) { li++; T = T "\n" L[li]; return 1 } return 0 }
+	function ch(k) { while (k > length(T)) if (!more()) return ""; return substr(T, k, 1) }
+	function skipws(   c) {
+		while (1) {
+			c = ch(P)
+			if (c == " " || c == "\t") P++
+			else if (c == "\\" && ch(P + 1) == "\n") P += 2
+			else return c
+		}
+	}
+	function word(   c, d, e, depth, out, k) {
+		c = skipws(); out = ""
+		if (c == "\047" || c == "\"") {
+			P++
+			while ((e = ch(P)) != "") {
+				if (e == c) { if (ch(P + 1) != c) { P++; return out } P++ }
+				out = out e; P++
+			}
+			return out
+		}
+		if (c == "%") {
+			k = P + 1; while (ch(k) ~ /[a-z_]/) k++
+			d = ch(k)
+			if (d in CLOSE) {
+				P = k + 1; depth = 1
+				while ((e = ch(P)) != "") {
+					if (e == d) depth++
+					else if (e == CLOSE[d] && !--depth) { P++; return out }
+					out = out e; P++
+				}
+				return out
+			}
+			if (d != "" && d !~ /[ \t\n]/) {
+				P = k + 1
+				while ((e = ch(P)) != "") {
+					if (e == d) { if (ch(P + 1) != d) { P++; return out } P++ }
+					out = out e; P++
+				}
+				return out
+			}
+		}
+		while ((e = ch(P)) != "" && e !~ /[ \t\n;]/) { out = out e; P++ }
+		return out
+	}
+	function scan(   i, s, p, c, t, name, hidden, params, docs) {
+		for (i = 1; i <= n; i++) {
+			s = L[i]
+			if (s ~ /^[ \t]*#/) continue
+			if (match(s, /^[ \t]*alias[ \t]+global[ \t]+[^ \t]+[ \t]+[^ \t]+[ \t]*$/)) {
+				split(s, a, /[ \t]+/); t = a[1] == "" ? 5 : 4
+				ALIASES[a[t]] = ALIASES[a[t]] " " a[t - 1]
+				continue
+			}
+			if (!(p = match(s, /(^|[ \t;{])(define-command|def)[ \t]/))) continue
+			if (substr(s, p, 1) ~ /[ \t;{]/) p++
+			T = s; li = i; P = p
+			word()
+			name = ""; hidden = 0; params = ""; docs = ""
+			while (1) {
+				c = skipws()
+				if (c == "" || c == "\n" || c == ";") break
+				if (name != "" && c != "-") break
+				t = word()
+				if (t == "-hidden") hidden = 1
+				else if (t == "-params") params = word()
+				else if (t == "-docstring") docs = word()
+				else if (t ~ /^-shell-(script-)?(candidates|completion)$/) word()
+				else if (t !~ /^-/) name = t
+			}
+			if (name == "" || name ~ /[ \t\n%]/) continue
+			if (hidden) { delete CMD[name]; continue }
+			CMD[name] = (params ~ /^[1-9]/ ? params + 0 : 0) "\t" firstline(docs)
+		}
+	}
+	BEGIN { CLOSE["{"] = "}"; CLOSE["["] = "]"; CLOSE["("] = ")"; CLOSE["<"] = ">" }
+	FNR == 1 { if (n) scan(); n = 0; builtins = FILENAME ~ /commands\.asciidoc$/; cur = "" }
+	# Kakoune s own: "*name[!]* <arg> [<arg>]::", then "*alias* x +", the text
+	builtins {
+		if (match($0, /^\*[a-z-]+(\[!\])?\*.*::$/)) {
+			cur = substr($0, 2); cur = substr(cur, 1, index(cur, "*") - 1); sub(/\[!\]$/, "", cur)
+			if (cur in BUILTIN) { cur = ""; next }
+			args = substr($0, length(cur) + 3); sub(/::$/, "", args)
+			while (args ~ /\[[^][]*\]/) gsub(/\[[^][]*\]/, "", args)
+			BUILTIN[cur] = args ~ /</ ? 1 : 0
+			next
+		}
+		if (cur == "") next
+		if ($0 ~ /^[ \t]*\*alias\* /) { a2 = $0; sub(/^[ \t]*\*alias\* /, "", a2); sub(/ .*/, "", a2); ALIASES[cur] = ALIASES[cur] " " a2; next }
+		if ($0 ~ /[^ \t]/ && !(cur in BDOC)) {
+			# (less the asciidoc: cross references, emphasis)
+			d = firstline($0); gsub(/ *\(?See <<[^>]*>>\)?/, "", d); gsub(/<<[^>]*>>/, "", d); gsub(/[\\*]/, "", d); sub(/ \+$/, "", d)
+			BDOC[cur] = d
+		}
+		next
+	}
+	{ L[++n] = $0 }
+	END {
+		if (n) scan()
+		out = ""; probe = ""
+		for (c in BUILTIN) { if (c in CMD) continue; out = out "b\t" c "\t" BUILTIN[c] "\t" substr(ALIASES[c], 2) "\t" BDOC[c] "\n" }
+		for (c in CMD) {
+			out = out "c\t" c "\t" CMD[c] "\n"
+			probe = probe "try %{ alias global palette-probe " q(c) "; set-option -add global palette_ok " q(c) " }\n"
+		}
+		# (the aliases, for those defined in scripts, go in as a 4th field)
+		n2 = split(out, rows, "\n"); out = ""
+		for (i = 1; i < n2; i++) {
+			split(rows[i], f, "\t")
+			if (f[1] == "c") rows[i] = "c\t" f[2] "\t" f[3] "\t" substr(ALIASES[f[2]], 2) "\t" f[4]
+			out = out rows[i] "\n"
+		}
+		print "set-option global palette_cmds " q(out)
+		print "set-option global palette_probe " q(probe "try %{ unalias global palette-probe }\n")
+	}' "$@"
+	exit ;;
+--save)     # DIR: where fzf is, as it closes
+	printf '%s\n' "$FZF_QUERY" > "$2/query"
+	printf '%s\n' "${FZF_POS:-1}" > "$2/pos"
 	exit ;;
 --legend)   # ROWS: draw $PICKER_LEGEND on the popup's last row
 	printf '\0337\033[%d;1H%s\033[K\033[0m\0338' "$2" "$PICKER_LEGEND" >/dev/tty
@@ -199,6 +350,10 @@ fg GitGutterDelete red; sgr "$v" 3; git_del="$esc[${v}m"
 export PICKER_DIM PICKER_FG PICKER_ERROR PICKER_WARNING PICKER_INFO PICKER_HINT
 
 # --- per-kind setup -----------------------------------------------------------
+# reopened (picker-resume): what was typed, and where the cursor was
+query= pos=
+[ -e "$dir/query" ] && IFS= read -r query < "$dir/query"
+[ -e "$dir/pos" ] && read -r pos < "$dir/pos"
 
 case $kind in
 buffers)
@@ -208,6 +363,7 @@ buffers)
 	for f in "${dir:?}"/*.name; do [ -e "$f" ] && count=$((count + 1)); done
 	# start on the previous buffer, so <space>b <ret> flips between two
 	start=1; [ "$count" -gt 1 ] && start=2
+	[ -n "$pos" ] && start=$pos pos=
 	set -- \
 		--delimiter '\t' --with-nth 2 --accept-nth 1 --no-sort \
 		--bind "load:pos($start)+unbind(load)" \
@@ -218,7 +374,7 @@ buffers)
 	items() { list_buffers; }
 	open() { IFS= read -r name < "${dir:?}/${1:?}.name"; printf '%s\n' "buffer -- $(kq "$name")"; } ;;
 files)
-	title=files
+	title="files · ${PWD##*/}"
 	legend='enter:open ctrl-s:split-below ctrl-v/alt-v:split-right'
 	set -- \
 		--scheme path \
@@ -230,7 +386,8 @@ files)
 		fd --type f --strip-cwd-prefix --color never
 		fd --type f --hidden --exclude .git --strip-cwd-prefix --color never | grep -E '(^|/)\.'
 	}
-	open() { printf '%s\n' "edit -- $(kq "$1")"; } ;;
+	# (relative to the popup's cwd, which needn't be kak's)
+	open() { printf '%s\n' "edit -- $(kq "$PWD/$1")"; } ;;
 locations|grep|workspace-symbols|changed)
 	legend='enter:open ctrl-s:split-below ctrl-v/alt-v:split-right'
 	set -- \
@@ -243,6 +400,7 @@ locations|grep|workspace-symbols|changed)
 		IFS= read -r type < "$dir/type"
 		IFS= read -r title < "$dir/title"
 		only=; [ -e "$dir/only" ] && IFS= read -r only < "$dir/only"
+		ws=; [ -e "$dir/wsroot" ] && IFS= read -r ws < "$dir/wsroot"
 		case $type in
 		lsp-diagnostics) title=diagnostics; [ -n "$only" ] || title='workspace diagnostics' ;;
 		lsp-document-symbol) title=symbols ;;
@@ -250,17 +408,17 @@ locations|grep|workspace-symbols|changed)
 		esac
 		set -- "$@" --no-sort
 		# (the files have no final newline: the last line is read anyway)
-		items() { { cat "$dir/list"; echo; } | format_locations "$root" "$type" "$only"; } ;;
+		items() { { cat "$dir/list"; echo; } | format_locations "$root" "$type" "$only" "$ws"; } ;;
 	grep)
-		title='global search'
+		title="global search · ${PWD##*/}"
 		set -- "$@" --disabled --prompt '/ ' \
 			--bind "change:reload:'$self' --grep {q}"
-		items() { :; } ;;
+		items() { [ -z "$query" ] || "$self" --grep "$query"; } ;;
 	workspace-symbols)
 		title='workspace symbols'
 		set -- "$@" --disabled \
 			--bind "change:reload:sleep 0.15; '$self' --wsym '${dir:?}' '$session' '$client' {q}"
-		items() { :; }
+		items() { [ -z "$query" ] || "$self" --wsym "$dir" "$session" "$client" "$query"; }
 		# a symbol request still out mustn't take over the next list
 		trap 'rm -rf -- "${dir:?}"; send "evaluate-commands -client $client %{ set-option window picker_wsym_out %{} }"' EXIT ;;
 	changed)
@@ -290,6 +448,94 @@ locations|grep|workspace-symbols|changed)
 		file=${1%%"$tab"*} r=${1#*"$tab"} line=${r%%"$tab"*} r=${r#*"$tab"} col=${r%%"$tab"*}
 		printf '%s\n' "edit -existing -- $(kq "$file") $line $col"
 	} ;;
+commands)
+	# DIR/cmds: "b|c TAB name TAB required params TAB aliases TAB doc" lines
+	# (palette-load), DIR/ok: the script ones that exist, DIR/mappings:
+	# :debug mappings. A mapping that runs just a command (":name<ret>")
+	# shows as that command's key; the rest of the user, goto, view, object
+	# and user-mode ones (and normal ones with a docstring) as themselves.
+	title=commands
+	legend='enter:run/prompt'
+	sgr "$accent" 3; PICKER_ACCENT="$esc[${v}m"
+	set -- --ansi --delimiter '\t' --with-nth 4 --no-preview --tiebreak begin
+	items() {
+		LC_ALL=C awk -v dim="$PICKER_DIM" -v fg="$PICKER_FG" -v acc="$PICKER_ACCENT" '
+		# key names to the keys typed
+		function keys(k) {
+			gsub(/<minus>/, "-", k); gsub(/<space>/, " ", k); gsub(/<semicolon>/, ";", k)
+			gsub(/<percent>/, "%", k); gsub(/<a-semicolon>/, "<a-;>", k)
+			gsub(/<quote>/, "\047", k); gsub(/<dquote>/, "\"", k)
+			gsub(/<lt>/, "<", k); gsub(/<gt>/, ">", k)
+			return k
+		}
+		# S in N columns: cut with a … if longer, else padded
+		function col(s, n) { return length(s) > n ? substr(s, 1, n - 1) "…" : sprintf("%-" n "s", s) }
+		FILENAME ~ /\/ok$/ { for (i = 1; i <= NF; i++) OK[$i] = 1; next }
+		FILENAME ~ /\/cmds$/ {
+			split($0, f, "\t")
+			if (f[2] == "" || (f[1] == "c" && !(f[2] in OK))) next
+			NAME[++nc] = f[2]; MIN[f[2]] = f[3]; AL[f[2]] = f[4]; DOC[f[2]] = f[5]
+			next
+		}
+		# " * mode key: \047keys\047 docstring"
+		/^ \* / {
+			s = substr($0, 4); mode = s; sub(/ .*/, "", mode); s = substr(s, length(mode) + 2)
+			if (!match(s, /: \047/)) next
+			key = substr(s, 1, RSTART - 1); s = substr(s, RSTART + 3); rhs = ""
+			while ((i = index(s, "\047")) > 0) {
+				rhs = rhs substr(s, 1, i - 1); s = substr(s, i + 1)
+				if (substr(s, 1, 1) == "\047") { rhs = rhs "\047"; s = substr(s, 2) } else break
+			}
+			sub(/^ /, "", s)
+			M[++nm] = mode; K[nm] = key; R[nm] = rhs; D[nm] = s
+		}
+		END {
+			# how each mode is entered: the built-in ones, and user modes
+			# by the mappings that enter them (shortest wins)
+			PRE["normal"] = ""; PRE["user"] = "<space>"; PRE["goto"] = "g"; PRE["view"] = "v"; PRE["object"] = "<a-i>"
+			for (pass = 0; pass < 3; pass++)
+				for (i = 1; i <= nm; i++) {
+					r = keys(R[i])
+					if (!(M[i] in PRE) || !match(r, /^:enter-user-mode( -lock)? [^ ]+<ret>$/)) continue
+					um = r; sub(/<ret>$/, "", um); sub(/.* /, "", um)
+					p = PRE[M[i]] K[i]
+					if (!(um in PRE) || length(p) < length(PRE[um])) PRE[um] = p
+				}
+			for (i = 1; i <= nm; i++) {
+				if (M[i] == "insert" || M[i] == "prompt" || M[i] == "menu" || !(M[i] in PRE)) continue
+				r = keys(R[i]); sub(/^<esc>/, "", r)
+				k = PRE[M[i]] K[i]
+				c = r; if (sub(/^:/, "", c) && sub(/<ret>$/, "", c) && (c in MIN)) {
+					BOUND[c] = BOUND[c] (BOUND[c] == "" ? "" : " ") k; continue
+				}
+				if (M[i] == "normal" && D[i] == "") continue
+				if (r ~ /^:enter-user-mode /) continue
+				show = r; sub(/<ret>$/, "", show)
+				MROW[++nr] = sprintf("m\t%s\t0\t%s%s %s%s %s%s", R[i], fg, col(show, 30), acc, col(k, 12), dim, D[i])
+			}
+			# commands with keys, the other mappings, the other commands
+			for (pass = 1; pass >= 0; pass--) {
+				for (i = 1; i <= nc; i++) {
+					c = NAME[i]
+					if ((BOUND[c] != "") != pass) continue
+					n = c (AL[c] != "" ? " (" AL[c] ")" : ""); n = col(n, 30)
+					if (AL[c] != "") sub(/ \(/, " " dim "(", n)
+					printf "c\t%s\t%s\t%s%s %s%s %s%s\n", c, MIN[c], fg, n, acc, col(BOUND[c], 12), dim, DOC[c]
+				}
+				if (pass) for (i = 1; i <= nr; i++) print MROW[i]
+			}
+		}' "$dir/ok" "$dir/cmds" "$dir/mappings"
+	}
+	open() {
+		kindc=${1%%"$tab"*} r=${1#*"$tab"} what=${r%%"$tab"*} r=${r#*"$tab"} min=${r%%"$tab"*}
+		if [ "$kindc" = m ]; then
+			printf '%s\n' "execute-keys -- $(kq "$what")"
+		elif [ "$min" -gt 0 ]; then
+			printf '%s\n' "execute-keys -- $(kq ":$what<space>")"
+		else
+			printf '%s\n' "$what"
+		fi
+	} ;;
 *)
 	echo "kak-picker: unknown kind: $kind" >&2; exit 1 ;;
 esac
@@ -313,8 +559,18 @@ rows=$(stty size </dev/tty); rows=${rows%% *}
 # ESCDELAY: how long fzf waits after an Escape for the rest of a key sequence
 # before taking it as the Escape key (100 ms by default, which esc-to-close
 # makes felt). tmux delivers sequences like alt-d whole, so 10 ms is plenty.
+# Each way out saves where fzf is first; the keys that open something print
+# their name (as --expect would) for the case below.
+save="execute-silent('$self' --save '${dir:?}')"
+for k in esc ctrl-c ctrl-g ctrl-q; do set -- "$@" --bind "$k:$save+abort"; done
+for k in enter ctrl-s ctrl-v alt-v; do
+	p=$k; [ "$k" = enter ] && p=
+	set -- "$@" --bind "$k:$save+print($p)+accept"
+done
+[ -n "$query" ] && set -- "$@" --query "$query"
+[ -n "$pos" ] && set -- "$@" --bind "result-final:pos($pos)+unbind(result-final)"
 out=$(
-	items | ESCDELAY=10 fzf "$@" --height $((rows - 1)) --expect ctrl-s,ctrl-v,alt-v \
+	items | ESCDELAY=10 fzf "$@" --height $((rows - 1)) \
 		--reverse --cycle --info inline-right \
 		--border rounded --border-label " $title " --border-label-pos 3 \
 		--color "fg:$cmfg,bg:$cmbg,preview-fg:$cmfg,preview-bg:$cmbg,gutter:$cmbg" \
@@ -323,11 +579,24 @@ out=$(
 		--color "info:$cdim,separator:$cdim,scrollbar:$cdim" \
 		--color "border:$cmfg,preview-border:$cmfg,label:$cmfg:bold" \
 		--bind "start:execute-silent:'$self' --legend $rows"
-) || exit 0
-key=$(printf '%s\n' "$out" | sed -n 1p)
-pick=$(printf '%s\n' "$out" | sed -n 2p)
-[ -n "$pick" ] || exit 0
-cmd=$(open "$pick")
+)
+status=$?
+key= cmd=
+if [ "$status" = 0 ]; then
+	key=$(printf '%s\n' "$out" | sed -n 1p)
+	pick=$(printf '%s\n' "$out" | sed -n 2p)
+	[ -z "$pick" ] || cmd=$(open "$pick")
+fi
+# kept for picker-resume, but for the buffers' copies (made afresh)
+if [ -e "$dir/last" ]; then
+	IFS= read -r last < "$dir/last"
+	case $kind in buffers|commands) find "$dir" -mindepth 1 ! -name query ! -name pos -delete ;; esac
+	printf '%s\n' "$kind" > "$dir/kind"
+	printf '%s\n' "$PWD" > "$dir/cwd"
+	rm -rf -- "${last:?}.old"
+	{ [ ! -e "$last" ] || mv -f -- "$last" "$last.old"; } && mv -- "$dir" "$last" && rm -rf -- "$last.old"
+fi
+[ -n "$cmd" ] || exit 0
 
 case $key in
 ctrl-s|ctrl-v|alt-v)

@@ -149,6 +149,12 @@ set-face global GitGutterModify    "%opt{gold},%opt{black}"
 set-face global GitGutterDelete    "%opt{red},%opt{black}"
 set-face global StatusLine         "%opt{white},%opt{lblack}"
 set-face global StatusLineMode     "%opt{black},%opt{blue}"
+set-face global StatusLineModeInsert "%opt{black},%opt{green}"
+# the status line's git part: branch, staged, modified, untracked
+set-face global StatusLineGit          "%opt{purple},%opt{lblack}"
+set-face global StatusLineGitAdded     "%opt{green},%opt{lblack}"
+set-face global StatusLineGitModified  "%opt{gold},%opt{lblack}"
+set-face global StatusLineGitUntracked "%opt{lgray},%opt{lblack}"
 set-face global StatusLineInfo     "%opt{purple}"
 set-face global StatusLineValue    "%opt{green}"
 set-face global StatusLineInactive "%opt{lgray},%opt{lblack}"
@@ -157,6 +163,9 @@ set-face global BufferLineInactive "%opt{lgray},%opt{lblack}"
 set-face global StatusCursor       "%opt{black},%opt{white}"
 set-face global Prompt             "%opt{blue}"
 set-face global MatchingChar       "%opt{blue},%opt{gray}+b"
+# jump labels (<ret>); Helix's onedark has them light gray, which is lost
+# among the comments: red, bold
+set-face global JumpLabel          "%opt{red}+b"
 set-face global BufferPadding      "%opt{linenr},%opt{black}"
 set-face global Whitespace         "%opt{gray}+f"
 set-face global WrapMarker         Whitespace

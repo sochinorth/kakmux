@@ -21,6 +21,7 @@ define-command -override -hidden kakrc-first-false nop
 # plugin_faces for :colorscheme to reset to, for schemes that don't set them
 # (and for :config-reload, which doesn't load the plugins again).
 declare-option -hidden str plugin_faces
+declare-option -hidden str plugin_rc
 evaluate-commands %sh{
 	[ "$kak_opt_kakrc_loaded" = true ] && exit
 	command -v kak-tree-sitter >/dev/null || exit
@@ -54,6 +55,8 @@ evaluate-commands %sh{
 	# its server (started by the first session), which this session joins
 	rc=$(kak-tree-sitter -dks --init "$kak_session") || exit
 	printf '%s\n' "$rc"
+	# (kept for the command palette, which lists what it defines)
+	printf "set-option -add global plugin_rc '%s\n'\n" "$(printf %s "$rc" | sed "s/'/''/g")"
 	# ts_<scope> faces link to their parent scope's, some of which it leaves
 	# undefined (ts_markup for ts_markup_bold, ...): define those too
 	faces= names=' '
@@ -91,6 +94,7 @@ evaluate-commands %sh{
 	command -v kak-lsp >/dev/null || exit
 	rc=$(kak-lsp) || exit
 	printf '%s\n' "$rc"
+	printf "set-option -add global plugin_rc '%s\n'\n" "$(printf %s "$rc" | sed "s/'/''/g")"
 	faces=
 	while IFS= read -r l; do
 		case $l in 'set-face global '*) faces="$faces$l
@@ -102,8 +106,8 @@ evaluate-commands %sh{
 }
 
 # Faces this kakrc draws with, for colour schemes that don't set them: the
-# hover/completion docs kak-lsp writes in markup, the modeline's diagnostic
-# counts, the git gutter. Kept beside the plugins' defaults above.
+# hover/completion docs kak-lsp writes in markup, the status line's mode,
+# git and diagnostic counts, the git gutter. Kept beside the plugins' defaults above.
 declare-option -hidden str kakrc_faces
 set-option global kakrc_faces %{
 set-face global InfoDefault Information
@@ -121,6 +125,12 @@ set-face global InfoDiagnosticInformation blue
 set-face global InfoDiagnosticHint green
 set-face global StatusLineError red
 set-face global StatusLineWarning yellow
+set-face global StatusLineModeInsert StatusLineMode
+set-face global StatusLineGit StatusLineInfo
+set-face global StatusLineGitAdded green
+set-face global StatusLineGitModified yellow
+set-face global StatusLineGitUntracked StatusLine
+set-face global JumpLabel +b@Error
 set-face global GitGutterAdd green
 set-face global GitGutterModify yellow
 set-face global GitGutterDelete red
@@ -283,7 +293,7 @@ alias global x!   write-quit!
 # split) doesn't have focus draws its status line in StatusLineInactive. That
 # defaults to the status line dimmed; colour schemes may set their own.
 # Add to statusline_faces any face a custom modelinefmt uses.
-declare-option str-list statusline_faces StatusLine StatusLineMode StatusLineInfo StatusLineValue StatusCursor StatusLineError StatusLineWarning
+declare-option str-list statusline_faces StatusLine StatusLineMode StatusLineInfo StatusLineValue StatusCursor StatusLineError StatusLineWarning StatusLineModeInsert StatusLineGit StatusLineGitAdded StatusLineGitModified StatusLineGitUntracked
 declare-option -hidden str-list unfocused_clients
 
 # faces live per window (client + buffer), so reapply on every buffer switch.
@@ -341,6 +351,90 @@ hook -group kakrc global FocusIn .* %{
 hook -group kakrc global WinDisplay .* statusline-apply-focus
 hook -group kakrc global ClientClose .* %{ set-option -remove global unfocused_clients %val{hook_param} }
 
+# --- status line ---------------------------------------------------------------
+# Helix's, as far as Kakoune's (drawn right-aligned, after any message) goes:
+#     INS  ⎇ main +1 ~2 ?1 │ src/point.c [+] │ ● 1 ● 3 │ ⣾ │ 3 sels │ 12:4
+# each part only when there's something to show: the mode unless normal,
+# the workspace's git branch (a short hash when detached) and its files
+# staged/modified/untracked, the file from the workspace root, unsaved
+# changes, warnings and errors (kak-lsp's counts, see inline diagnostics),
+# language server progress, selections when more than one, the cursor.
+# All of it is options set by hooks, none of it worked out as it's drawn:
+# the git part in the background as the gutter locates the buffer (first
+# shown, saved, focused: see git gutter), the rest without a shell. Set
+# once; :config-reload leaves it as it is.
+declare-option -hidden str modeline_ins
+declare-option -hidden str modeline_mode
+declare-option -hidden str modeline_sels
+declare-option -hidden str modeline_modified
+declare-option -hidden str modeline_lsp_sep
+declare-option -hidden str workspace_bufname
+declare-option -hidden str git_branch
+declare-option -hidden str git_staged
+declare-option -hidden str git_modified
+declare-option -hidden str git_untracked
+declare-option -hidden str git_sep
+declare-option -hidden str lsp_diag_sep
+# (kak-lsp's, should it not be there)
+declare-option -hidden str lsp_modeline_progress
+declare-option -hidden str lsp_modeline_message_requests
+try %{
+	evaluate-commands "kakrc-first-%opt{kakrc_loaded}"
+	set-option global modelinefmt %{{StatusLineModeInsert}%opt{modeline_ins}{StatusLineMode}%opt{modeline_mode}{StatusLineGit}%opt{git_branch}{StatusLineGitAdded}%opt{git_staged}{StatusLineGitModified}%opt{git_modified}{StatusLineGitUntracked}%opt{git_untracked}{StatusLine}%opt{git_sep} %opt{workspace_bufname}%opt{modeline_modified}%opt{lsp_diag_sep}{StatusLineWarning}%opt{lsp_diag_warnings}{StatusLineError}%opt{lsp_diag_errors}{StatusLine}%opt{modeline_lsp_sep}{StatusLineInfo}%opt{lsp_modeline_progress}%opt{lsp_modeline_message_requests}{StatusLine}%opt{modeline_sels} │ %val{cursor_line}:%val{cursor_char_column} - %val{client}@[%val{session}]}
+}
+
+# The mode, Helix's colours: insert, and the menus Kakoune names (a user
+# mode's own name isn't known: <space>, <c-w>, m... are all "user"). Prompts
+# aren't named: the prompt shows at the left of the same line.
+hook -group kakrc global ModeChange (push|pop):.*:normal %{
+	set-option window modeline_ins ''
+	set-option window modeline_mode ''
+}
+hook -group kakrc global ModeChange (push|pop):.*:insert %{ set-option window modeline_ins ' INS ' }
+hook -group kakrc global ModeChange (push|pop):.*:next-key\[user-mapping\] %{ set-option window modeline_mode ' USER ' }
+hook -group kakrc global ModeChange (push|pop):.*:next-key\[goto\] %{ set-option window modeline_mode ' GOTO ' }
+hook -group kakrc global ModeChange (push|pop):.*:next-key\[view\] %{ set-option window modeline_mode ' VIEW ' }
+hook -group kakrc global ModeChange (push|pop):.*:next-key\[object\] %{ set-option window modeline_mode ' OBJECT ' }
+
+# Unsaved changes and the selection count, whenever keys stop (and as a
+# window shows, a buffer is written): a command per value, no shell.
+define-command -override -hidden modeline-modified-true %{ set-option buffer modeline_modified ' [+]' }
+define-command -override -hidden modeline-modified-false %{ set-option buffer modeline_modified '' }
+define-command -override -hidden modeline-sels-1 %{ set-option window modeline_sels '' }
+define-command -override -hidden modeline-idle %{
+	evaluate-commands "modeline-modified-%val{modified}"
+	try %{ evaluate-commands "modeline-sels-%val{selection_count}" } catch %{
+		set-option window modeline_sels " │ %val{selection_count} sels"
+	}
+}
+hook -group kakrc global NormalIdle .* modeline-idle
+hook -group kakrc global InsertIdle .* %{ evaluate-commands "modeline-modified-%val{modified}" }
+hook -group kakrc global WinDisplay .* modeline-idle
+hook -group kakrc global BufWritePost .* modeline-modified-false
+# language server progress (kak-lsp's spinner, global)
+hook -group kakrc global GlobalSetOption lsp_modeline_progress= %{ set-option global modeline_lsp_sep '' }
+hook -group kakrc global GlobalSetOption lsp_modeline_progress=.+ %{ set-option global modeline_lsp_sep ' │ ' }
+
+# git-status-set ROOT BRANCH STAGED MODIFIED UNTRACKED: from the background
+# git status (git-gutter-locate), for every buffer of the workspace ROOT
+# (its root, less ROOT, is nothing: git-status-none takes no arguments)
+declare-option -hidden str-list git_status_cmp
+define-command -override -hidden -params 0 git-status-none nop
+define-command -override -hidden -params 5 git-status-set %{
+	evaluate-commands -buffer * %{
+		set-option buffer git_status_cmp %opt{workspace_root}
+		set-option -remove buffer git_status_cmp %arg{1}
+		try %{
+			evaluate-commands -verbatim git-status-none %opt{git_status_cmp}
+			set-option buffer git_branch %arg{2}
+			set-option buffer git_staged %arg{3}
+			set-option buffer git_modified %arg{4}
+			set-option buffer git_untracked %arg{5}
+			set-option buffer git_sep ' │'
+		}
+	}
+}
+
 # Under kakmux every split is a client of the same session, so the default
 # status line's " - client@[session]" tail is just noise there: strip it from
 # the global modelinefmt, once, when the first kakmux client connects (a
@@ -386,14 +480,10 @@ try %{
 	set-option global lsp_inlay_diagnostic_sign ''
 	set-option global lsp_inlay_diagnostic_gap ' '
 	# lsp.display-progress-messages: progress (and pending server messages)
-	# at the start of the modeline. Not the rest of kak-lsp's modeline: no
-	# breadcrumbs (Helix has none, and they're a request whenever keys stop).
-	# Added to the front once, not again on each config-reload.
+	# in the status line (see "status line" above). Not the rest of kak-lsp's
+	# modeline: no breadcrumbs (Helix has none, and they're a request
+	# whenever keys stop).
 	remove-hooks global lsp-breadcrumbs
-	try %{
-		evaluate-commands "kakrc-first-%opt{kakrc_loaded}"
-		set-option global modelinefmt "%%opt{lsp_modeline_progress}%%opt{lsp_modeline_message_requests}{StatusLineWarning}%%opt{lsp_diag_warnings}{StatusLineError}%%opt{lsp_diag_errors}{StatusLine} %opt{modelinefmt}"
-	}
 	# Helix's gutter mark, coloured by severity
 	set-option global lsp_diagnostic_line_error_sign   '●'
 	set-option global lsp_diagnostic_line_warning_sign '●'
@@ -697,7 +787,8 @@ hook -group kakrc global BufSetOption lsp_inlay_diagnostics=.* %{
 		w=$kak_opt_lsp_diagnostic_warning_count e=$kak_opt_lsp_diagnostic_error_count
 		[ "${w:-0}" -gt 0 ] && w=" ● $w" || w=
 		[ "${e:-0}" -gt 0 ] && e=" ● $e" || e=
-		printf '%s\n' "set-option buffer lsp_diag_warnings '$w'; set-option buffer lsp_diag_errors '$e'"
+		s=; [ -n "$w$e" ] && s=' │'
+		printf '%s\n' "set-option buffer lsp_diag_warnings '$w'; set-option buffer lsp_diag_errors '$e'; set-option buffer lsp_diag_sep '$s'"
 		double() {
 			r= rest=$2
 			while :; do
@@ -1124,6 +1215,7 @@ define-command -override -hidden -params 4 picker-locations %{
 				printf "set-option -remove global picker_only '%s'\n" "$(printf %s "$e" | sed "s/'/''/g")"
 			done
 		fi
+		printf %s "${kak_opt_workspace_root:-$PWD}" > "$dir/wsroot"
 		echo "picker-open locations '$dir'"
 	}
 }
@@ -1161,22 +1253,27 @@ define-command -override -hidden -params 2 picker-wsym-deliver %{
 define-command -override workspace-symbol-picker -docstring 'search the workspace''s symbols (picker)' %{
 	evaluate-commands %sh{
 		dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-picker.XXXXXX") || exit
+		printf %s "${kak_opt_workspace_root:-$PWD}" > "$dir/wsroot"
 		echo "picker-open workspace-symbols '$dir'"
 	}
 }
 
-define-command -override global-search -docstring 'search the files under the cwd as you type (ripgrep, picker)' %{
+# These start at the buffer's workspace root (see the git gutter below), and
+# list paths from there; with -cwd, at kak's cwd.
+define-command -override global-search -params ..1 -docstring 'global-search [-cwd]: search the workspace''s files (or the cwd''s) as you type (ripgrep, picker)' %{
 	evaluate-commands %sh{
+		root=${kak_opt_workspace_root:-$PWD}; [ "$1" = -cwd ] && root=$PWD
 		dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-picker.XXXXXX") || exit
-		echo "picker-open grep '$dir'"
+		printf "picker-open grep '%s' '%s'\n" "$dir" "$(printf %s "$root" | sed "s/'/''/g")"
 	}
 }
-define-command -override changed-file-picker -docstring 'files changed since HEAD (git, picker)' %{
+define-command -override changed-file-picker -docstring "files changed since HEAD in the workspace's repository (git, picker)" %{
 	evaluate-commands %sh{
-		git rev-parse --show-toplevel >/dev/null 2>&1 ||
+		root=${kak_opt_workspace_root:-$PWD}
+		git -C "$root" rev-parse --show-toplevel >/dev/null 2>&1 ||
 			{ echo "fail 'changed files: not in a git repository'"; exit; }
 		dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-picker.XXXXXX") || exit
-		echo "picker-open changed '$dir'"
+		printf "picker-open changed '%s' '%s'\n" "$dir" "$(printf %s "$root" | sed "s/'/''/g")"
 	}
 }
 
@@ -1208,8 +1305,50 @@ define-command -override -hidden git-gutter-known-yes nop
 define-command -override -hidden git-gutter-known-no nop
 define-command -override -hidden git-gutter-on-yes nop
 
+# Helix's workspace, per buffer: the nearest directory up from its file's
+# with a .git, .jj, .hg, .svn or .helix in it, else kak's cwd (for buffers
+# without a file, the cwd's own). The pickers start there (<space>f, /, g)
+# and the status line names files from there. Worked out as the gutter
+# locates the buffer's repository (when first shown, saved, focused), in
+# the same shell, by tests alone. kak-lsp finds each server's root its own
+# way (its root_globs: for clangd compile_commands.json, .clangd, .git, .hg,
+# nearest first), which mostly comes to the same directory.
+declare-option -hidden str workspace_root
+
 define-command -override -hidden git-gutter-locate %{
 	evaluate-commands %sh{
+		case $kak_buffile in /*) d=${kak_buffile%/*} ;; *) d=$PWD ;; esac
+		ws=$PWD
+		while :; do
+			if [ -e "$d/.git" ] || [ -e "$d/.jj" ] || [ -e "$d/.hg" ] || [ -e "$d/.svn" ] || [ -e "$d/.helix" ]; then
+				ws=${d:-/}; break
+			fi
+			[ -n "$d" ] || break
+			d=${d%/*}
+		done
+		rel=$kak_bufname
+		case $kak_buffile in "$ws"/*) rel=${kak_buffile#"$ws"/} ;; esac
+		printf "set-option buffer workspace_root '%s'; set-option buffer workspace_bufname '%s'\n" \
+			"$(printf %s "$ws" | sed "s/'/''/g")" "$(printf %s "$rel" | sed "s/'/''/g")"
+		# the status line's git part, for the workspace (no index refresh:
+		# --no-optional-locks keeps git commands run meanwhile from failing
+		# on its lock)
+		(
+			git -C "$ws" --no-optional-locks status --porcelain=v2 --branch 2>/dev/null |
+				LC_ALL=C awk -v ws="$ws" '
+				function q(t) { gsub(/\047/, "\047\047", t); return "\047" t "\047" }
+				/^# branch\.oid / { oid = substr($3, 1, 7) }
+				/^# branch\.head / { head = $3 }
+				/^[12] / { if (substr($2, 1, 1) != ".") s++; if (substr($2, 2, 1) != ".") m++ }
+				/^u / { m++ }
+				/^\? / { u++ }
+				END {
+					if (head == "") exit
+					if (head == "(detached)") head = oid
+					printf "git-status-set %s %s %s %s %s\n", q(ws), q(" ⎇ " head), \
+						q(s ? " +" s : ""), q(m ? " ~" m : ""), q(u ? " ?" u : "")
+				}' | kak -p "$kak_session"
+		) >/dev/null 2>&1 </dev/null &
 		root=
 		case $kak_buffile in
 		/*) root=$(git -C "${kak_buffile%/*}" rev-parse --show-toplevel 2>/dev/null) ;;
@@ -2749,12 +2888,20 @@ declare-option -hidden str-list picker_clients
 hook -group kakrc global FocusIn     .* %{ set-option -remove global picker_clients %val{client} }
 hook -group kakrc global ClientClose .* %{ set-option -remove global picker_clients %val{hook_param} }
 
-# picker-open KIND DIR
-define-command -override -hidden -params 2 picker-open %{
+# picker-open KIND DIR [CWD]: the popup (fzf, rg, git) runs in CWD, else
+# kak's cwd. It keeps DIR at DIR/last when it closes, for picker-resume.
+declare-option -hidden str picker_resume_from
+define-command -override -hidden -params 2..3 picker-open %{
 	evaluate-commands %sh{
-		[ -n "$kak_client_env_TMUX" ] && exit
-		rm -rf -- "${2:?}"
-		echo "fail 'picker: needs tmux (:kakmux)'"
+		if [ -z "$kak_client_env_TMUX" ]; then
+			rm -rf -- "${2:?}"
+			echo "fail 'picker: needs tmux (:kakmux)'"; exit
+		fi
+		printf '%s\n' "${TMPDIR:-/tmp}/kak-picker-last.$kak_session" > "$2/last"
+		if [ -n "$kak_opt_picker_resume_from" ]; then
+			cp -- "$kak_opt_picker_resume_from/query" "$kak_opt_picker_resume_from/pos" "$2/" 2>/dev/null
+			echo "set-option global picker_resume_from ''"
+		fi
 	}
 	faces-load
 	echo -to-file "%arg{2}/faces" %opt{faces_cache}
@@ -2763,7 +2910,7 @@ define-command -override -hidden -params 2 picker-open %{
 	nop %sh{
 		{
 			TMUX="$kak_client_env_TMUX" tmux display-popup -t "$kak_client_env_TMUX_PANE" \
-				-d "$PWD" -e "BAT_THEME=$kak_opt_picker_bat_theme" -E -B -w 90% -h 80% -- \
+				-d "${3:-$PWD}" -e "BAT_THEME=$kak_opt_picker_bat_theme" -E -B -w 90% -h 80% -- \
 				~/.config/kak/bin/kak-picker "$1" "${2:?}" "$kak_session" "$kak_client" "$kak_client_env_TMUX_PANE" \
 				|| {
 					rm -rf -- "${2:?}"
@@ -2773,6 +2920,31 @@ define-command -override -hidden -params 2 picker-open %{
 		} >/dev/null 2>&1 </dev/null &
 	}
 }
+
+# Helix's <space>': the last picker again, with what was typed and the
+# cursor where they were. kak-lsp's lists (references, diagnostics,
+# symbols) as they were then, without asking the server again; the buffers,
+# files, search results, changes and commands as they are now.
+define-command -override picker-resume -docstring 'reopen the last picker as it was left' %{
+	evaluate-commands %sh{
+		kq() { printf "'%s'" "$(printf %s "$1" | sed "s/'/''/g")"; }
+		last=${TMPDIR:-/tmp}/kak-picker-last.$kak_session
+		[ -e "$last/kind" ] || { echo "fail 'no picker to reopen'"; exit; }
+		IFS= read -r kind < "$last/kind"; IFS= read -r cwd < "$last/cwd"
+		case $kind in
+		buffers) echo "set-option global picker_resume_from $(kq "$last"); buffer-picker" ;;
+		commands) echo "set-option global picker_resume_from $(kq "$last"); command-palette" ;;
+		*)
+			dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-picker.XXXXXX") || exit
+			cp -R -- "$last"/. "$dir"/ && rm -f -- "$dir/kind" "$dir/cwd"
+			echo "picker-open $(kq "$kind") $(kq "$dir") $(kq "$cwd")" ;;
+		esac
+	}
+}
+hook -group kakrc global KakEnd .* %{
+	nop %sh{ rm -rf -- "${TMPDIR:-/tmp}/kak-picker-last.$kak_session" }
+}
+map global user <quote> ':picker-resume<ret>' -docstring 'last picker again'
 
 define-command -override buffer-picker -docstring 'fuzzy-pick a buffer (tmux popup)' %{
 	evaluate-commands %sh{
@@ -2802,15 +2974,236 @@ define-command -override buffer-picker -docstring 'fuzzy-pick a buffer (tmux pop
 	}
 }
 
-define-command -override file-picker -docstring "fuzzy-pick a file under kak's cwd (tmux popup)" %{
+define-command -override file-picker -params ..1 -docstring "file-picker [-cwd]: fuzzy-pick a file under the buffer's workspace root (or kak's cwd) (tmux popup)" %{
 	evaluate-commands %sh{
+		root=${kak_opt_workspace_root:-$PWD}; [ "$1" = -cwd ] && root=$PWD
 		dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-picker.XXXXXX") || exit
-		echo "picker-open files '${dir:?}'"
+		printf "picker-open files '%s' '%s'\n" "${dir:?}" "$(printf %s "$root" | sed "s/'/''/g")"
 	}
 }
 
-map global user b ':buffer-picker<ret>' -docstring 'buffer picker'
-map global user f ':file-picker<ret>'   -docstring 'file picker'
+map global user b ':buffer-picker<ret>'   -docstring 'buffer picker'
+map global user f ':file-picker<ret>'     -docstring 'file picker (workspace)'
+map global user F ':file-picker -cwd<ret>' -docstring "file picker (kak's cwd)"
+
+# --- command palette (<space>?) ------------------------------------------------
+# Helix's: every command, with its keys and the first line of its docstring,
+# and every mapping of the menus (user, goto, view, object, the user modes)
+# that isn't just a command's key. Enter runs it; a command that needs
+# arguments opens the prompt with its name typed. The commands are read
+# from the scripts that define them (bin/kak-picker --parse: Kakoune's docs,
+# the autoloaded scripts, the plugins' as they loaded, this kakrc), once,
+# and each time those that exist just then are kept (modules load later:
+# a command exists if an alias to it can be made). Mappings come from
+# :debug mappings, which, like :debug faces, is dumped once and cached.
+# Both are read again after :config-reload.
+# (The plugins' scripts go to the parser in a file: an environment
+# variable can't hold them.)
+declare-option -hidden str palette_cmds
+declare-option -hidden str palette_probe
+declare-option -hidden str-list palette_ok
+declare-option -hidden bool palette_loaded false
+declare-option -hidden str mappings_cache
+set-option global palette_loaded false
+set-option global mappings_cache ''
+define-command -override -hidden palette-load %{
+	evaluate-commands %sh{
+		[ -n "$kak_opt_mappings_cache" ] ||
+			echo "evaluate-commands -buffer *debug* %{ debug mappings; execute-keys 'ge<a-?>^Mappings:<ret>'; set-option global mappings_cache %val{selection} }"
+		[ "$kak_opt_palette_loaded" = true ] && exit
+		f=$(mktemp "${TMPDIR:-/tmp}/kak-palette.XXXXXX") || exit
+		echo "echo -to-file '$f' %opt{plugin_rc}; palette-parse '$f'"
+	}
+}
+define-command -override -hidden -params 1 palette-parse %{
+	evaluate-commands %sh{
+		~/.config/kak/bin/kak-picker --parse "$kak_config" "$kak_runtime" "$1"
+		rm -f -- "$1"
+	}
+	set-option global palette_loaded true
+}
+define-command -override command-palette -docstring 'run any command or mapping, found by name, key or docstring (picker)' %{
+	palette-load
+	set-option global palette_ok
+	evaluate-commands %opt{palette_probe}
+	evaluate-commands %sh{
+		dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-picker.XXXXXX") || exit
+		echo "echo -to-file '$dir/cmds' %opt{palette_cmds}"
+		echo "echo -to-file '$dir/ok' %opt{palette_ok}"
+		echo "echo -to-file '$dir/mappings' %opt{mappings_cache}"
+		echo "picker-open commands '$dir'"
+	}
+}
+map global user ? ':command-palette<ret>' -docstring 'command palette'
+
+# --- jump labels (<ret>) --------------------------------------------------------
+# Helix's gw, on one key: <ret> labels every word on screen (two characters
+# or more) with two letters, drawn over its first two, the nearest ones
+# (after the cursor, before it, in turn) getting the first labels: aa, ab,
+# ... az, ba ... Typing a label selects that word (and saves the selection
+# before on the jump list); <s-ret> extends the main selection to it
+# instead. Any other key cancels. Buffers whose <ret> does something of its
+# own keep it: those that map it (kak-lsp's lists, diff, man, doc, git)
+# outrank this global mapping, and grep and make, which watch for the key
+# (a NormalKey hook, which a mapping hides), get it passed on. One shell
+# works out the labels, one finds the word picked; the first key typed only
+# narrows the labels down (an option per first letter).
+declare-option -hidden range-specs jump_labels
+declare-option -hidden str-list jump_targets
+declare-option -hidden str jump_first
+declare-option -hidden str jump_extend
+declare-option -hidden str-list jump_descs
+declare-option -hidden range-specs jump_labels_a; declare-option -hidden range-specs jump_labels_b
+declare-option -hidden range-specs jump_labels_c; declare-option -hidden range-specs jump_labels_d
+declare-option -hidden range-specs jump_labels_e; declare-option -hidden range-specs jump_labels_f
+declare-option -hidden range-specs jump_labels_g; declare-option -hidden range-specs jump_labels_h
+declare-option -hidden range-specs jump_labels_i; declare-option -hidden range-specs jump_labels_j
+declare-option -hidden range-specs jump_labels_k; declare-option -hidden range-specs jump_labels_l
+declare-option -hidden range-specs jump_labels_m; declare-option -hidden range-specs jump_labels_n
+declare-option -hidden range-specs jump_labels_o; declare-option -hidden range-specs jump_labels_p
+declare-option -hidden range-specs jump_labels_q; declare-option -hidden range-specs jump_labels_r
+declare-option -hidden range-specs jump_labels_s; declare-option -hidden range-specs jump_labels_t
+declare-option -hidden range-specs jump_labels_u; declare-option -hidden range-specs jump_labels_v
+declare-option -hidden range-specs jump_labels_w; declare-option -hidden range-specs jump_labels_x
+declare-option -hidden range-specs jump_labels_y; declare-option -hidden range-specs jump_labels_z
+add-highlighter -override global/jump-labels replace-ranges jump_labels
+
+define-command -override -hidden jump-labels-native-grep %{ execute-keys -with-hooks <ret> }
+define-command -override -hidden jump-labels-native-make %{ execute-keys -with-hooks <ret> }
+define-command -override -hidden -params ..1 jump-labels %{
+	try %{
+		evaluate-commands "jump-labels-native-%opt{filetype}"
+	} catch %{
+		set-option window jump_extend %arg{1}
+		evaluate-commands -draft %{
+			execute-keys gtGbx
+			try %{
+				execute-keys 's\b\w\w<ret>'
+				set-option window jump_descs %val{selections_desc}
+			} catch %{ set-option window jump_descs }
+		}
+		evaluate-commands %sh{
+			eval set -- $kak_quoted_opt_jump_descs
+			[ $# -gt 0 ] || { echo "fail 'jump: no words on screen'"; exit; }
+			printf '%s\n' "$@" | LC_ALL=C awk -v cl="$kak_cursor_line" -v cc="$kak_cursor_column" '
+			BEGIN { abc = "abcdefghijklmnopqrstuvwxyz" }
+			{
+				split($0, r, /[.,]/); l = r[1] + 0; c = r[2] + 0
+				if (l > cl || (l == cl && c > cc)) F[++nf] = $0; else Bk[++nb] = $0
+			}
+			END {
+				# after the cursor, nearest first, then before it, in turn
+				n = 0; i = 1; j = nb
+				while ((i <= nf || j >= 1) && n < 676) {
+					if (i <= nf) W[n++] = F[i++]
+					if (j >= 1 && n < 676) W[n++] = Bk[j--]
+				}
+				all = ""
+				for (k = 0; k < n; k++) {
+					lab = substr(abc, int(k / 26) + 1, 1) substr(abc, k % 26 + 1, 1)
+					split(W[k], r, ","); spec = " \047" W[k] "|{JumpLabel}" lab "\047"
+					all = all spec; ONE[substr(lab, 1, 1)] = ONE[substr(lab, 1, 1)] spec
+					tg = tg " \047" lab "=" r[1] "\047"
+				}
+				print "set-option window jump_labels %val{timestamp}" all
+				for (k = 1; k <= 26; k++) {
+					f = substr(abc, k, 1)
+					print "set-option window jump_labels_" f " %val{timestamp}" ONE[f]
+				}
+				print "set-option window jump_targets" tg
+				print "on-key -mode-name jump %{ jump-labels-first %val{key} }"
+			}'
+		}
+	}
+}
+define-command -override -hidden -params 1 jump-labels-first %{
+	try %{
+		evaluate-commands "set-option window jump_labels %%opt{jump_labels_%arg{1}}"
+		set-option window jump_first %arg{1}
+		on-key -mode-name jump %{ jump-labels-go %val{key} }
+	} catch %{
+		jump-labels-clear
+	}
+}
+define-command -override -hidden -params 1 jump-labels-go %{
+	set-option window jump_labels %val{timestamp}
+	evaluate-commands %sh{
+		want="$kak_opt_jump_first$1="
+		eval set -- $kak_quoted_opt_jump_targets
+		for t; do
+			case $t in "$want"*) ;; *) continue ;; esac
+			to=${t#"$want"}
+			if [ -z "$kak_opt_jump_extend" ]; then
+				echo "execute-keys <c-s>; select $to,$to; execute-keys <a-i>w"; exit
+			fi
+			# extend: from the main selection's anchor; past it, to the word's end
+			a=${kak_selection_desc%%,*}
+			al=${a%.*} ac=${a#*.} tl=${to%.*} tc=${to#*.}
+			if [ "$tl" -gt "$al" ] || { [ "$tl" -eq "$al" ] && [ "$tc" -gt "$ac" ]; }; then
+				echo "execute-keys <c-s>; select $a,$to; execute-keys E"
+			else
+				echo "execute-keys <c-s>; select $a,$to"
+			fi
+			exit
+		done
+	}
+	set-option window jump_targets
+}
+define-command -override -hidden jump-labels-clear %{
+	set-option window jump_labels %val{timestamp}
+	set-option window jump_targets
+}
+map global normal <ret>   ': jump-labels<ret>'         -docstring 'jump to a word (labels)'
+map global normal <s-ret> ': jump-labels -extend<ret>' -docstring 'extend to a word (labels)'
+
+# --- explorer (<space>e, <space>E) ------------------------------------------------
+# Helix's file explorer, as broot beside kak: in kakbr, its sidebar gets the
+# focus (found out from the kakmux, as split-focus goes, by @outer_pane);
+# elsewhere in tmux, broot opens in a split to the left, 25% of the window
+# within 24..40 columns as kakbr's, at the buffer's workspace root (<space>e)
+# or its file's directory (<space>E), or if one is open in this window
+# already, that gets the focus. Files open in this kak: broot-open (Enter, and
+# double-click through the opener dir put first on its PATH) finds the kak
+# pane beside it. broot reads kakbr's broot.hjson (git on) when there is one.
+# Under kakmux the split is weighted like the others (bin/kakmux-even).
+define-command -override explorer -params ..1 -docstring "explorer [-buffer-dir]: broot beside kak at the workspace root (or the buffer's directory); in kakbr, its sidebar" %{
+	evaluate-commands %sh{
+		if [ -z "$kak_client_env_TMUX" ] || [ -z "$kak_client_env_TMUX_PANE" ]; then
+			echo "fail 'explorer: needs tmux (:kakmux, kakbr)'"; exit
+		fi
+		socket=${kak_client_env_TMUX%%,*} pane=$kak_client_env_TMUX_PANE
+		t() { tmux -S "$socket" "$@"; }
+		s=$socket p=$pane
+		while outer=$(tmux -S "$s" show-options -qv -t "$p" @outer_pane 2>/dev/null) && [ -n "$outer" ]; do
+			s=${outer%% *} p=${outer#* }
+			side=$(tmux -S "$s" show-options -wqv -t "$p" @kakbr_side 2>/dev/null)
+			if [ -n "$side" ]; then
+				tmux -S "$s" select-pane -t "$side" >/dev/null 2>&1; exit
+			fi
+		done
+		ex=$(t list-panes -t "$pane" -F '#{pane_id} #{@kak_explorer}' 2>/dev/null | awk '$2 == 1 { print $1; exit }')
+		if [ -n "$ex" ]; then t select-pane -t "$ex" >/dev/null 2>&1; exit; fi
+		dir=${kak_opt_workspace_root:-$PWD}
+		if [ "$1" = -buffer-dir ]; then
+			case $kak_buffile in /*) dir=${kak_buffile%/*} ;; esac
+		fi
+		w=$(t display-message -p -t "$pane" '#{window_width}') || exit
+		want=$((w / 4)); [ "$want" -lt 24 ] && want=24; [ "$want" -gt 40 ] && want=40
+		case $socket in */kakmux-*)
+			t set-option -w -t "$pane" @kakmux_ratio $((100 - want * 100 / w)) ;;
+		esac
+		conf=${XDG_CONFIG_HOME:-$HOME/.config}/kakbr/broot.hjson
+		[ -e "$conf" ] || conf=
+		id=$(t split-window -h -b -l "$want" -t "$pane" -c "$dir" -P -F '#{pane_id}' -- \
+			env PATH="$HOME/.local/lib/broot-opener:$PATH" broot ${conf:+--conf "$conf"} "$dir" 2>/dev/null) || {
+			t set-option -wu -t "$pane" @kakmux_ratio >/dev/null 2>&1
+			echo "fail 'explorer: tmux split-window failed'"; exit
+		}
+		t set-option -p -t "$id" @kak_explorer 1 >/dev/null 2>&1
+	}
+}
+map global user e ':explorer<ret>'             -docstring 'file explorer (workspace root)'
+map global user E ':explorer -buffer-dir<ret>' -docstring "file explorer (buffer's directory)"
 
 # --- splits (tmux) ------------------------------------------------------------
 # A split is a tmux pane running another client of this session, so all
