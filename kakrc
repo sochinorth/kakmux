@@ -1940,12 +1940,19 @@ hook -group kakrc global FocusIn     .* %{ set-option -remove global picker_clie
 hook -group kakrc global ClientClose .* %{ set-option -remove global picker_clients %val{hook_param} }
 
 # picker-open KIND DIR [CWD]: the popup (fzf, rg, git) runs in CWD, else
-# kak's cwd
+# kak's cwd. It keeps DIR at DIR/last when it closes, for picker-resume.
+declare-option -hidden str picker_resume_from
 define-command -override -hidden -params 2..3 picker-open %{
 	evaluate-commands %sh{
-		[ -n "$kak_client_env_TMUX" ] && exit
-		rm -rf -- "${2:?}"
-		echo "fail 'picker: needs tmux (:kakmux)'"
+		if [ -z "$kak_client_env_TMUX" ]; then
+			rm -rf -- "${2:?}"
+			echo "fail 'picker: needs tmux (:kakmux)'"; exit
+		fi
+		printf '%s\n' "${TMPDIR:-/tmp}/kak-picker-last.$kak_session" > "$2/last"
+		if [ -n "$kak_opt_picker_resume_from" ]; then
+			cp -- "$kak_opt_picker_resume_from/query" "$kak_opt_picker_resume_from/pos" "$2/" 2>/dev/null
+			echo "set-option global picker_resume_from ''"
+		fi
 	}
 	faces-load
 	echo -to-file "%arg{2}/faces" %opt{faces_cache}
@@ -1964,6 +1971,31 @@ define-command -override -hidden -params 2..3 picker-open %{
 		} >/dev/null 2>&1 </dev/null &
 	}
 }
+
+# Helix's <space>': the last picker again, with what was typed and the
+# cursor where they were. kak-lsp's lists (references, diagnostics,
+# symbols) as they were then, without asking the server again; the buffers,
+# files, search results, changes and commands as they are now.
+define-command -override picker-resume -docstring 'reopen the last picker as it was left' %{
+	evaluate-commands %sh{
+		kq() { printf "'%s'" "$(printf %s "$1" | sed "s/'/''/g")"; }
+		last=${TMPDIR:-/tmp}/kak-picker-last.$kak_session
+		[ -e "$last/kind" ] || { echo "fail 'no picker to reopen'"; exit; }
+		IFS= read -r kind < "$last/kind"; IFS= read -r cwd < "$last/cwd"
+		case $kind in
+		buffers) echo "set-option global picker_resume_from $(kq "$last"); buffer-picker" ;;
+		commands) echo "set-option global picker_resume_from $(kq "$last"); command-palette" ;;
+		*)
+			dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-picker.XXXXXX") || exit
+			cp -R -- "$last"/. "$dir"/ && rm -f -- "$dir/kind" "$dir/cwd"
+			echo "picker-open $(kq "$kind") $(kq "$dir") $(kq "$cwd")" ;;
+		esac
+	}
+}
+hook -group kakrc global KakEnd .* %{
+	nop %sh{ rm -rf -- "${TMPDIR:-/tmp}/kak-picker-last.$kak_session" }
+}
+map global user <quote> ':picker-resume<ret>' -docstring 'last picker again'
 
 define-command -override buffer-picker -docstring 'fuzzy-pick a buffer (tmux popup)' %{
 	evaluate-commands %sh{

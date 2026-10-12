@@ -24,8 +24,13 @@
 #   ctrl-d         buffers: close it (refused when it has unsaved changes)
 #   alt-d          buffers: close it, discarding unsaved changes
 #
+# On closing, DIR (less the buffers' copies) is kept at the path in DIR/last
+# (one per session), with what was typed (query) and the cursor's place
+# (pos): kakrc's picker-resume (<space>') opens it again from there, the
+# list as it was for kak-lsp's lists, made afresh for the others.
+#
 # fzf calls back into this script as `kak-picker --legend|--list|--delete|
-# --grep|--wsym|--diff ...`.
+# --grep|--wsym|--diff|--save ...`.
 #
 # Everything up to fzf runs in the shell itself, no other processes (each one
 # costs a millisecond or two), so the popup comes up at once.
@@ -260,6 +265,10 @@ case $1 in
 		print "set-option global palette_probe " q(probe "try %{ unalias global palette-probe }\n")
 	}' "$@"
 	exit ;;
+--save)     # DIR: where fzf is, as it closes
+	printf '%s\n' "$FZF_QUERY" > "$2/query"
+	printf '%s\n' "${FZF_POS:-1}" > "$2/pos"
+	exit ;;
 --legend)   # ROWS: draw $PICKER_LEGEND on the popup's last row
 	printf '\0337\033[%d;1H%s\033[K\033[0m\0338' "$2" "$PICKER_LEGEND" >/dev/tty
 	exit ;;
@@ -341,6 +350,10 @@ fg GitGutterDelete red; sgr "$v" 3; git_del="$esc[${v}m"
 export PICKER_DIM PICKER_FG PICKER_ERROR PICKER_WARNING PICKER_INFO PICKER_HINT
 
 # --- per-kind setup -----------------------------------------------------------
+# reopened (picker-resume): what was typed, and where the cursor was
+query= pos=
+[ -e "$dir/query" ] && IFS= read -r query < "$dir/query"
+[ -e "$dir/pos" ] && read -r pos < "$dir/pos"
 
 case $kind in
 buffers)
@@ -350,6 +363,7 @@ buffers)
 	for f in "${dir:?}"/*.name; do [ -e "$f" ] && count=$((count + 1)); done
 	# start on the previous buffer, so <space>b <ret> flips between two
 	start=1; [ "$count" -gt 1 ] && start=2
+	[ -n "$pos" ] && start=$pos pos=
 	set -- \
 		--delimiter '\t' --with-nth 2 --accept-nth 1 --no-sort \
 		--bind "load:pos($start)+unbind(load)" \
@@ -399,12 +413,12 @@ locations|grep|workspace-symbols|changed)
 		title="global search · ${PWD##*/}"
 		set -- "$@" --disabled --prompt '/ ' \
 			--bind "change:reload:'$self' --grep {q}"
-		items() { :; } ;;
+		items() { [ -z "$query" ] || "$self" --grep "$query"; } ;;
 	workspace-symbols)
 		title='workspace symbols'
 		set -- "$@" --disabled \
 			--bind "change:reload:sleep 0.15; '$self' --wsym '${dir:?}' '$session' '$client' {q}"
-		items() { :; }
+		items() { [ -z "$query" ] || "$self" --wsym "$dir" "$session" "$client" "$query"; }
 		# a symbol request still out mustn't take over the next list
 		trap 'rm -rf -- "${dir:?}"; send "evaluate-commands -client $client %{ set-option window picker_wsym_out %{} }"' EXIT ;;
 	changed)
@@ -545,8 +559,18 @@ rows=$(stty size </dev/tty); rows=${rows%% *}
 # ESCDELAY: how long fzf waits after an Escape for the rest of a key sequence
 # before taking it as the Escape key (100 ms by default, which esc-to-close
 # makes felt). tmux delivers sequences like alt-d whole, so 10 ms is plenty.
+# Each way out saves where fzf is first; the keys that open something print
+# their name (as --expect would) for the case below.
+save="execute-silent('$self' --save '${dir:?}')"
+for k in esc ctrl-c ctrl-g ctrl-q; do set -- "$@" --bind "$k:$save+abort"; done
+for k in enter ctrl-s ctrl-v alt-v; do
+	p=$k; [ "$k" = enter ] && p=
+	set -- "$@" --bind "$k:$save+print($p)+accept"
+done
+[ -n "$query" ] && set -- "$@" --query "$query"
+[ -n "$pos" ] && set -- "$@" --bind "result-final:pos($pos)+unbind(result-final)"
 out=$(
-	items | ESCDELAY=10 fzf "$@" --height $((rows - 1)) --expect ctrl-s,ctrl-v,alt-v \
+	items | ESCDELAY=10 fzf "$@" --height $((rows - 1)) \
 		--reverse --cycle --info inline-right \
 		--border rounded --border-label " $title " --border-label-pos 3 \
 		--color "fg:$cmfg,bg:$cmbg,preview-fg:$cmfg,preview-bg:$cmbg,gutter:$cmbg" \
@@ -555,7 +579,18 @@ out=$(
 		--color "info:$cdim,separator:$cdim,scrollbar:$cdim" \
 		--color "border:$cmfg,preview-border:$cmfg,label:$cmfg:bold" \
 		--bind "start:execute-silent:'$self' --legend $rows"
-) || exit 0
+)
+status=$?
+# kept for picker-resume, but for the buffers' copies (made afresh)
+if [ -e "$dir/last" ]; then
+	IFS= read -r last < "$dir/last"
+	case $kind in buffers|commands) find "$dir" -mindepth 1 ! -name query ! -name pos -delete ;; esac
+	printf '%s\n' "$kind" > "$dir/kind"
+	printf '%s\n' "$PWD" > "$dir/cwd"
+	rm -rf -- "${last:?}.old"
+	{ [ ! -e "$last" ] || mv -f -- "$last" "$last.old"; } && mv -- "$dir" "$last" && rm -rf -- "$last.old"
+fi
+[ "$status" = 0 ] || exit 0
 key=$(printf '%s\n' "$out" | sed -n 1p)
 pick=$(printf '%s\n' "$out" | sed -n 2p)
 [ -n "$pick" ] || exit 0
