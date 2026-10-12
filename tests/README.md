@@ -105,6 +105,8 @@ pickers open in a tmux window (`pcap`/`pkeys`) instead of a popup.
   (`-j` above ~4, or a busy machine) some miss; rerun serially before
   believing a failure. Perf and visual tests are only meaningful serially.
 - `rename-edges`/`rename-failed` wait 20 s for the rename timer (`slow`).
+- `palette` fails about one run in four: the capture can land before the
+  picker's columns are relaid out for what's on screen. Rerun it alone.
 - `accepting connection failed`, `Error while transfering remote messages`
   in `*debug*`: a `kak -p` race, harmless; `dbge` drops them.
 - `<esc>` to kak goes with `esc NAME` (tmux send-keys): a raw `\033` written
