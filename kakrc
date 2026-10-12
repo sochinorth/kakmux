@@ -2226,6 +2226,41 @@ define-command -override -hidden -params 1 run-in-focused-client %{
 	}
 }
 
+# split-swap -L|-R|-U|-D: this split and its neighbour that way trade
+# places (not past the edge), the focus staying with this one. Weights go
+# with the place (as Helix's sizes do): the two panes' names are swapped in
+# them.
+define-command -override -hidden -params 1 split-swap %{
+	evaluate-commands %sh{
+		if [ -z "$kak_client_env_TMUX" ] || [ -z "$kak_client_env_TMUX_PANE" ]; then
+			echo "fail 'split: needs tmux (:kakmux)'"; exit
+		fi
+		export TMUX="$kak_client_env_TMUX"
+		case $1 in -L) edge=left ;; -R) edge=right ;; -U) edge=top ;; -D) edge=bottom ;; esac
+		me=$kak_client_env_TMUX_PANE
+		[ "$(tmux display-message -p -t "$me" "#{pane_at_$edge}" 2>/dev/null)" = 0 ] || exit 0
+		tmux select-pane -t "$me" "$1" >/dev/null 2>&1
+		other=$(tmux list-panes -t "$me" -F '#{pane_active} #{pane_id}' 2>/dev/null | sed -n 's/^1 //p')
+		[ -n "$other" ] && [ "$other" != "$me" ] || exit 0
+		tmux swap-pane -s "$me" -t "$other" \; select-pane -t "$me" >/dev/null 2>&1
+		w=$(tmux show-options -wqv -t "$me" @kakmux_weights 2>/dev/null)
+		[ -n "$w" ] && w=$(printf %s "$w" | jq -c --arg a "$me" --arg b "$other" \
+			'with_entries(.key |= (split(",") | map(if . == $a then $b elif . == $b then $a else . end) | sort | join(",")))' 2>/dev/null) &&
+			tmux set-option -w -t "$me" @kakmux_weights "$w" >/dev/null 2>&1
+		exit 0
+	}
+}
+# split-goto-file -h|-v: gf (see goto-file) in a new split
+define-command -override -hidden -params 1 split-goto-file %{
+	evaluate-commands %sh{
+		kq() { printf "'%s'" "$(printf %s "$1" | sed "s/'/''/g")"; }
+		init="buffer -- $(kq "$kak_bufname"); select $kak_selections_desc; goto-file"
+		printf '%s\n' "split-with $1 $(kq "$init")"
+	}
+}
+
+# Helix's window mode: each key also with Ctrl held (<c-w><c-v>...), H J K L
+# swap with the split that way, f / F gf in a split stacked / side by side.
 try %{ declare-user-mode window }
 map global window v ':vsplit<ret>'                         -docstring 'split side by side'
 map global window s ':hsplit<ret>'                         -docstring 'split stacked'
@@ -2242,6 +2277,21 @@ map global window q ':quit<ret>'                           -docstring 'close thi
 map global window o ':split-only<ret>'                     -docstring 'close other splits'
 map global window z ':tmux-here resize-pane -Z -t %val{client_env_TMUX_PANE}<ret>' -docstring 'zoom this split (toggle)'
 map global window = ':splits-even<ret>'                     -docstring 'even out all splits'
+map global window H ':split-swap -L<ret>'                  -docstring 'swap with the split left'
+map global window J ':split-swap -D<ret>'                  -docstring 'swap with the split below'
+map global window K ':split-swap -U<ret>'                  -docstring 'swap with the split above'
+map global window L ':split-swap -R<ret>'                  -docstring 'swap with the split right'
+map global window f ':split-goto-file -v<ret>'             -docstring 'file under cursor, split stacked'
+map global window F ':split-goto-file -h<ret>'             -docstring 'file under cursor, split side by side'
+map global window <c-v> ':vsplit<ret>'                     -docstring 'split side by side'
+map global window <c-s> ':hsplit<ret>'                     -docstring 'split stacked'
+map global window <c-h> ':split-focus -L<ret>'             -docstring 'focus left'
+map global window <c-j> ':split-focus -D<ret>'             -docstring 'focus down'
+map global window <c-k> ':split-focus -U<ret>'             -docstring 'focus up'
+map global window <c-l> ':split-focus -R<ret>'             -docstring 'focus right'
+map global window <c-w> ':tmux-here select-pane -t :.+<ret>' -docstring 'next split'
+map global window <c-q> ':quit<ret>'                       -docstring 'close this split'
+map global window <c-o> ':split-only<ret>'                 -docstring 'close other splits'
 map global normal <c-w> ':enter-user-mode window<ret>'
 map global user   w     ':enter-user-mode window<ret>'     -docstring 'window mode'
 
