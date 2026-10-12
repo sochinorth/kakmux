@@ -1106,6 +1106,7 @@ define-command -override -hidden -params 4 picker-locations %{
 				printf "set-option -remove global picker_only '%s'\n" "$(printf %s "$e" | sed "s/'/''/g")"
 			done
 		fi
+		printf %s "${kak_opt_workspace_root:-$PWD}" > "$dir/wsroot"
 		echo "picker-open locations '$dir'"
 	}
 }
@@ -1143,22 +1144,27 @@ define-command -override -hidden -params 2 picker-wsym-deliver %{
 define-command -override workspace-symbol-picker -docstring 'search the workspace''s symbols (picker)' %{
 	evaluate-commands %sh{
 		dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-picker.XXXXXX") || exit
+		printf %s "${kak_opt_workspace_root:-$PWD}" > "$dir/wsroot"
 		echo "picker-open workspace-symbols '$dir'"
 	}
 }
 
-define-command -override global-search -docstring 'search the files under the cwd as you type (ripgrep, picker)' %{
+# These start at the buffer's workspace root (see the git gutter below), and
+# list paths from there; with -cwd, at kak's cwd.
+define-command -override global-search -params ..1 -docstring 'global-search [-cwd]: search the workspace''s files (or the cwd''s) as you type (ripgrep, picker)' %{
 	evaluate-commands %sh{
+		root=${kak_opt_workspace_root:-$PWD}; [ "$1" = -cwd ] && root=$PWD
 		dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-picker.XXXXXX") || exit
-		echo "picker-open grep '$dir'"
+		printf "picker-open grep '%s' '%s'\n" "$dir" "$(printf %s "$root" | sed "s/'/''/g")"
 	}
 }
-define-command -override changed-file-picker -docstring 'files changed since HEAD (git, picker)' %{
+define-command -override changed-file-picker -docstring "files changed since HEAD in the workspace's repository (git, picker)" %{
 	evaluate-commands %sh{
-		git rev-parse --show-toplevel >/dev/null 2>&1 ||
+		root=${kak_opt_workspace_root:-$PWD}
+		git -C "$root" rev-parse --show-toplevel >/dev/null 2>&1 ||
 			{ echo "fail 'changed files: not in a git repository'"; exit; }
 		dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-picker.XXXXXX") || exit
-		echo "picker-open changed '$dir'"
+		printf "picker-open changed '%s' '%s'\n" "$dir" "$(printf %s "$root" | sed "s/'/''/g")"
 	}
 }
 
@@ -1821,8 +1827,9 @@ declare-option -hidden str-list picker_clients
 hook -group kakrc global FocusIn     .* %{ set-option -remove global picker_clients %val{client} }
 hook -group kakrc global ClientClose .* %{ set-option -remove global picker_clients %val{hook_param} }
 
-# picker-open KIND DIR
-define-command -override -hidden -params 2 picker-open %{
+# picker-open KIND DIR [CWD]: the popup (fzf, rg, git) runs in CWD, else
+# kak's cwd
+define-command -override -hidden -params 2..3 picker-open %{
 	evaluate-commands %sh{
 		[ -n "$kak_client_env_TMUX" ] && exit
 		rm -rf -- "${2:?}"
@@ -1835,7 +1842,7 @@ define-command -override -hidden -params 2 picker-open %{
 	nop %sh{
 		{
 			TMUX="$kak_client_env_TMUX" tmux display-popup -t "$kak_client_env_TMUX_PANE" \
-				-d "$PWD" -e "BAT_THEME=$kak_opt_picker_bat_theme" -E -B -w 90% -h 80% -- \
+				-d "${3:-$PWD}" -e "BAT_THEME=$kak_opt_picker_bat_theme" -E -B -w 90% -h 80% -- \
 				~/.config/kak/bin/kak-picker "$1" "${2:?}" "$kak_session" "$kak_client" "$kak_client_env_TMUX_PANE" \
 				|| {
 					rm -rf -- "${2:?}"
@@ -1874,15 +1881,17 @@ define-command -override buffer-picker -docstring 'fuzzy-pick a buffer (tmux pop
 	}
 }
 
-define-command -override file-picker -docstring "fuzzy-pick a file under kak's cwd (tmux popup)" %{
+define-command -override file-picker -params ..1 -docstring "file-picker [-cwd]: fuzzy-pick a file under the buffer's workspace root (or kak's cwd) (tmux popup)" %{
 	evaluate-commands %sh{
+		root=${kak_opt_workspace_root:-$PWD}; [ "$1" = -cwd ] && root=$PWD
 		dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-picker.XXXXXX") || exit
-		echo "picker-open files '${dir:?}'"
+		printf "picker-open files '%s' '%s'\n" "${dir:?}" "$(printf %s "$root" | sed "s/'/''/g")"
 	}
 }
 
-map global user b ':buffer-picker<ret>' -docstring 'buffer picker'
-map global user f ':file-picker<ret>'   -docstring 'file picker'
+map global user b ':buffer-picker<ret>'   -docstring 'buffer picker'
+map global user f ':file-picker<ret>'     -docstring 'file picker (workspace)'
+map global user F ':file-picker -cwd<ret>' -docstring "file picker (kak's cwd)"
 
 # --- splits (tmux) ------------------------------------------------------------
 # A split is a tmux pane running another client of this session, so all
