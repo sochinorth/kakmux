@@ -2315,13 +2315,16 @@ define-command -override -hidden ts-shrink %{
 			a=$(key "${1%,*}") b=$(key "${1#*,}")
 			if [ "$a" -le "$b" ]; then lo=$a hi=$b; else lo=$b hi=$a; fi
 		}
+		# (entries that are the selection itself left out: <a-up> at the
+		# root, or pressed again before its answer, gets the same again)
 		eval set -- "$kak_quoted_opt_ts_history"
-		if [ $# -gt 0 ]; then
-			n=$# i=0 rest= last=
-			for e; do
-				i=$((i + 1))
-				if [ "$i" -lt "$n" ]; then rest="$rest '$e'"; else last=$e; fi
-			done
+		rest= last=
+		for e; do
+			[ "$e" = "$kak_selections_desc" ] && continue
+			[ -n "$last" ] && rest="$rest '$last'"
+			last=$e
+		done
+		if [ -n "$last" ]; then
 			# each selection still around the one it came from
 			set -- $kak_selections_desc
 			ok=1 m=0
