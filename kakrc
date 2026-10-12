@@ -1735,6 +1735,71 @@ define-command -override -hidden insert-indent-expand %{
 	}
 }
 
+# --- normal mode ---------------------------------------------------------------
+# Helix's keys where Kakoune's are the same idea under another key, or none:
+# x selects the line and, pressed again on whole lines, the next one too
+# (Kakoune's x, which this repeats, is also X); J joins lines (Kakoune's
+# <a-j>), K keeps selections matching a regex (<a-k>), = formats the
+# selections (LSP), <a-minus> merges all the selections into one, ~ swaps
+# case and <a-`> upper-cases (Kakoune's the other way round), <c-a>/<c-x>
+# add/subtract the count (1) to the number in each selection. Kakoune's J
+# and K, extending down/up, are <s-down>/<s-up> (as <s-left>/<s-right> above);
+# <a-j>, <a-k> and <a-J>, <a-K> keep their keys.
+map global normal x       ':extend-line-below<ret>'
+map global normal X       x
+map global normal J       <a-j>
+map global normal K       <a-k>
+map global normal <s-down> J
+map global normal <s-up>   K
+map global normal =       ':lsp-range-formatting<ret>'
+map global normal <a-minus> ':merge-selections<ret>'
+map global normal ~       <a-`>
+map global normal <a-`>   ~
+map global normal <c-a>   ':increment %val{count}<ret>'
+map global normal <c-x>   ':increment "-%val{count}"<ret>'
+
+define-command -override -hidden extend-line-below %{
+	evaluate-commands -itersel %{
+		try %{
+			# whole lines already: one more
+			execute-keys -draft '<a-k>\A^.*\n\z<ret>'
+			execute-keys Jx
+		} catch %{
+			execute-keys x
+		}
+	}
+}
+define-command -override merge-selections -docstring 'merge-selections: one selection from the first one''s start to the last one''s end (Helix A-minus)' %{
+	evaluate-commands %sh{
+		eval set -- $kak_selections_desc
+		first=$1; eval "last=\${$#}"
+		# each desc is anchor,cursor, either way round: the smaller and larger end
+		lo() { a=${1%,*} b=${1#*,}; if [ "${a%.*}" -lt "${b%.*}" ] || { [ "${a%.*}" -eq "${b%.*}" ] && [ "${a#*.}" -le "${b#*.}" ]; }; then echo "$a"; else echo "$b"; fi; }
+		hi() { a=${1%,*} b=${1#*,}; if [ "${a%.*}" -lt "${b%.*}" ] || { [ "${a%.*}" -eq "${b%.*}" ] && [ "${a#*.}" -le "${b#*.}" ]; }; then echo "$b"; else echo "$a"; fi; }
+		echo "select $(lo "$first"),$(hi "$last")"
+	}
+}
+# increment [N]: N (1, or -1 for a bare -; 0, an unset count, is 1) added to
+# the number in or around each selection (Kakoune's number object); a
+# selection with none is left as it is
+define-command -override increment -params ..1 -docstring 'increment [<n>]: add <n> (1) to the number in each selection (Helix C-a; -<n> subtracts)' %{
+	evaluate-commands -save-regs n -itersel %{
+		try %{
+			execute-keys <a-i>n
+			set-register n %sh{
+				d=${1:-1}
+				case $d in -|-0) d=-1 ;; 0) d=1 ;; esac
+				printf '%s\n' "$kak_selection" | awk -v d="$d" '
+					# whole numbers keep their width when zero-padded (007, 010)
+					/^-?[0-9]+$/ { n = $0 + d; w = sub(/^-/, "") ? length($0) + 1 : length($0)
+						if ($0 ~ /^0./) printf "%0" w ".0f", n; else printf "%.0f", n; next }
+					{ printf "%s", $0 + d }'
+			}
+			execute-keys '"nR'
+		}
+	}
+}
+
 # --- bufferline (tmux) --------------------------------------------------------
 # Kakoune can't draw a bufferline itself, so each client publishes its buffer
 # list to its tmux pane as @kak_bufferline, which kakmux.conf draws as the
