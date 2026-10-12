@@ -581,6 +581,12 @@ out=$(
 		--bind "start:execute-silent:'$self' --legend $rows"
 )
 status=$?
+key= cmd=
+if [ "$status" = 0 ]; then
+	key=$(printf '%s\n' "$out" | sed -n 1p)
+	pick=$(printf '%s\n' "$out" | sed -n 2p)
+	[ -z "$pick" ] || cmd=$(open "$pick")
+fi
 # kept for picker-resume, but for the buffers' copies (made afresh)
 if [ -e "$dir/last" ]; then
 	IFS= read -r last < "$dir/last"
@@ -590,11 +596,7 @@ if [ -e "$dir/last" ]; then
 	rm -rf -- "${last:?}.old"
 	{ [ ! -e "$last" ] || mv -f -- "$last" "$last.old"; } && mv -- "$dir" "$last" && rm -rf -- "$last.old"
 fi
-[ "$status" = 0 ] || exit 0
-key=$(printf '%s\n' "$out" | sed -n 1p)
-pick=$(printf '%s\n' "$out" | sed -n 2p)
-[ -n "$pick" ] || exit 0
-cmd=$(open "$pick")
+[ -n "$cmd" ] || exit 0
 
 case $key in
 ctrl-s|ctrl-v|alt-v)
