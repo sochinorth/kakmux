@@ -2528,22 +2528,55 @@ hook -group kakrc global InsertDelete `   %{ try %{ autopairs-close ` } }
 # get the guides of the shallower of their neighbours, drawn after them.
 # For the visible lines only, in one shell, whenever keys stop and the
 # buffer, the view, the indentation options or the cursor's block changed
-# (compared without a shell). Tabs and spaces alike: a guide every
-# indentwidth columns (tabstop for tabs, indentwidth 0).
+# (compared without a shell). In insert mode, the buffer counts as changed
+# only where typing changes the guides: the line count, the indentation (or
+# blankness) of the lines being typed on, or an edit from elsewhere (a new
+# undo step: typing makes none till insert mode ends); else they'd go
+# again with every key. Tabs and spaces alike: a guide every indentwidth
+# columns (tabstop for tabs, indentwidth 0).
 declare-option -hidden range-specs indent_guides
 declare-option -hidden str-list indent_guides_cache
+declare-option -hidden str-list indent_guides_base
 declare-option -hidden str-list indent_guides_cmp
 declare-option -hidden int indent_guides_cursor
 add-highlighter -override global/indent-guides replace-ranges indent_guides
 define-command -override -hidden -params 0 indent-guides-none nop
-define-command -override -hidden indent-guides-idle %{
+# what the guides depend on, in indent_guides_base: a syntax tree (scoped or
+# not), the view's first line and height, the widths
+define-command -override -hidden -params 4 indent-guides-range %{
+	set-option -add window indent_guides_base "r%arg{1}.%arg{3}"
+}
+define-command -override -hidden indent-guides-key %{
 	try %{
 		ts-has-tree
-		set-option window indent_guides_cmp m1
+		set-option window indent_guides_base m1
 	} catch %{
-		set-option window indent_guides_cmp m0
+		set-option window indent_guides_base m0
 	}
-	set-option -add window indent_guides_cmp "t%val{timestamp}" "r%val{window_range}" "w%opt{indentwidth}.%opt{tabstop}" "l%val{cursor_line}"
+	evaluate-commands "indent-guides-range %val{window_range}"
+	set-option -add window indent_guides_base "w%opt{indentwidth}.%opt{tabstop}"
+}
+define-command -override -hidden indent-guides-idle %{
+	indent-guides-key
+	set-option -add window indent_guides_base "t%val{timestamp}"
+	indent-guides-check-line
+}
+define-command -override -hidden indent-guides-idle-insert %{
+	indent-guides-key
+	set-option -add window indent_guides_base "n%val{buf_line_count}" "i%val{history_id}"
+	try %{
+		evaluate-commands -draft %{
+			execute-keys 'x'
+			execute-keys 's\A\h*.<ret>'
+			set-option -add window indent_guides_base %val{selections}
+		}
+	}
+	indent-guides-check-line
+}
+# (the key, less the last render's, is nothing: indent-guides-none takes no
+# arguments)
+define-command -override -hidden indent-guides-check %{
+	set-option window indent_guides_cmp %opt{indent_guides_base}
 	set-option -remove window indent_guides_cmp %opt{indent_guides_cache}
 	try %{
 		evaluate-commands -verbatim indent-guides-none %opt{indent_guides_cmp}
@@ -2551,19 +2584,27 @@ define-command -override -hidden indent-guides-idle %{
 		indent-guides-render
 	}
 }
+# (and the cursor's line: the cache has those of its block)
+define-command -override -hidden indent-guides-check-line %{
+	set-option -add window indent_guides_base "l%val{cursor_line}"
+	indent-guides-check
+}
 hook -group kakrc global NormalIdle .* indent-guides-idle
-hook -group kakrc global InsertIdle .* indent-guides-idle
-hook -group kakrc global WinResize .* indent-guides-idle
+hook -group kakrc global InsertIdle .* indent-guides-idle-insert
+# a resize, only if the view's lines changed (Kakoune says so also when the
+# gutter's width changes, as it does while typing: see inline diagnostics),
+# in each client (WinResize runs without one, its cursor on line 1)
+define-command -override -hidden indent-guides-resized %{
+	indent-guides-key
+	indent-guides-check
+}
+hook -group kakrc global WinResize .* %{
+	try %{ evaluate-commands -verbatim each-client indent-guides-resized %val{client_list} }
+}
 
 # the visible lines and 30 more each side (for the scopes around them)
 define-command -override -hidden indent-guides-render %{
 	set-option window indent_guides_cursor %val{cursor_line}
-	try %{
-		ts-has-tree
-		set-option window indent_guides_cache m1
-	} catch %{
-		set-option window indent_guides_cache m0
-	}
 	evaluate-commands -draft %{
 		execute-keys 'gb30J<a-;>Gt30Kx'
 		evaluate-commands %sh{
@@ -2572,11 +2613,40 @@ define-command -override -hidden indent-guides-render %{
 			set -- $kak_window_range
 			top=$(($1 + 1)) bot=$(($1 + $3))
 			unit=$kak_opt_indentwidth; [ "$unit" -gt 0 ] || unit=$kak_opt_tabstop
-			case $kak_opt_indent_guides_cache in *m1*) scoped=1 ;; *) scoped=0 ;; esac
+			case $kak_opt_indent_guides_base in m1*) scoped=1 ;; *) scoped=0 ;; esac
 			printf '%s' "$kak_selection" | awk -v first="$first" -v top="$top" -v bot="$bot" \
 				-v cur="$kak_opt_indent_guides_cursor" -v unit="$unit" -v ts="$kak_opt_tabstop" \
-				-v scoped="$scoped" -v stamp="$kak_timestamp" -v range="$kak_window_range" \
-				-v widths="$kak_opt_indentwidth.$kak_opt_tabstop" '
+				-v scoped="$scoped" -v stamp="$kak_timestamp" '
+			# the scopes for the cursor on line C: the definition (rs to re,
+			# none: rs 0) and the innermost block (as to ae) with its
+			# guide (act, none: -1) brighter; as a string, to compare
+			function scope(c,   n, s) {
+				rs = 0; re = -1; act = -1; as = ae = 0
+				if (!scoped) { rs = first; re = last; return "all" }
+				if (eff[c] > 0) rs = re = c
+				else if (!blank[c]) {
+					# a header (and opening bracket lines), or a closing bracket
+					s = text[c]
+					if (s ~ /^[\])\175]/) { if (eff[c - 1] > 0) rs = re = c - 1 }
+					else {
+						n = c + 1
+						while (n <= last && !blank[n] && eff[n] == 0 && text[n] ~ /^[[(\173][ \t]*$/) n++
+						if (n <= last && eff[n] > 0) rs = re = n
+					}
+				}
+				if (rs > 0) {
+					while (rs > first && eff[rs - 1] > 0) rs--
+					while (re < last && eff[re + 1] > 0) re++
+					# the innermost block: around the cursor, at least as deep
+					if (eff[c] > 0) {
+						D = eff[c]; act = int((D - 1) / unit) * unit
+						as = ae = c
+						while (as > rs && eff[as - 1] >= D) as--
+						while (ae < re && eff[ae + 1] >= D) ae++
+					}
+				}
+				return rs " " re " " act " " as " " ae
+			}
 			{
 				l = first + NR - 1; last = l; text[l] = $0
 				match($0, /^[ \t]*/); lead[l] = substr($0, 1, RLENGTH)
@@ -2594,30 +2664,12 @@ define-command -override -hidden indent-guides-render %{
 				for (l = last; l >= first; l--) {
 					if (!blank[l]) { p = width[l]; eff[l] = p } else eff[l] = (up[l] < p ? up[l] : p)
 				}
-				rs = 0; re = -1; act = -1
-				if (!scoped) { rs = first; re = last }
-				else if (eff[cur] > 0) { rs = re = cur }
-				else if (!blank[cur]) {
-					# a header (and opening bracket lines), or a closing bracket
-					s = text[cur]
-					if (s ~ /^[\])\175]/) { if (eff[cur - 1] > 0) rs = re = cur - 1 }
-					else {
-						n = cur + 1
-						while (n <= last && !blank[n] && eff[n] == 0 && text[n] ~ /^[[(\173][ \t]*$/) n++
-						if (n <= last && eff[n] > 0) rs = re = n
-					}
-				}
-				if (scoped && rs > 0) {
-					while (rs > first && eff[rs - 1] > 0) rs--
-					while (re < last && eff[re + 1] > 0) re++
-					# the innermost block: around the cursor, at least as deep
-					if (eff[cur] > 0) {
-						D = eff[cur]; act = int((D - 1) / unit) * unit
-						as = ae = cur
-						while (as > rs && eff[as - 1] >= D) as--
-						while (ae < re && eff[ae + 1] >= D) ae++
-					}
-				}
+				# what the result depends on (indent_guides_base), and the
+				# cursor anywhere the scopes come out the same (anywhere,
+				# unscoped)
+				me = scope(cur); key = ""
+				for (l = first; l <= last; l++) if (l == cur || scope(l) == me) key = key " l" l
+				scope(cur)
 				out = ""
 				for (l = (rs > top ? rs : top); l <= re && l <= bot; l++) {
 					E = eff[l]; if (E <= 0) continue
@@ -2645,13 +2697,7 @@ define-command -override -hidden indent-guides-render %{
 					}
 				}
 				print "set-option window indent_guides " stamp out
-				# what the result depends on: the cursor anywhere in its block
-				# (at the same depth), or anywhere, unscoped
-				key = " '\''t" stamp "'\'' '\''r" range "'\'' '\''w" widths "'\''"
-				if (!scoped) for (l = first; l <= last; l++) key = key " l" l
-				else if (act >= 0) { for (l = as; l <= ae; l++) if (eff[l] == D) key = key " l" l }
-				else key = key " l" cur
-				print "set-option -add window indent_guides_cache" key
+				print "set-option window indent_guides_cache %opt{indent_guides_base}" key
 			}'
 		}
 	}
