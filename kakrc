@@ -2680,28 +2680,97 @@ map global user   w     ':enter-user-mode window<ret>'     -docstring 'window mo
 map global goto n '<esc>:buffer-next<ret>'     -docstring 'next buffer'
 map global goto p '<esc>:buffer-previous<ret>' -docstring 'previous buffer'
 
-# --- languages.toml ----------------------------------------------------------
-# indent = { tab-width = 4, unit = "\t" }; indentwidth 0 means indent with tabs.
-# Helix's "bash" is Kakoune's "sh". Undone when the filetype changes to one
-# not in the list: window hooks run after global ones, so an undo on any
-# change would also undo this hook's own work when going from one of these
-# to another (c to cpp). lang-indent-<filetype> exists for the ones listed.
+# --- languages.toml, indentation ---------------------------------------------
+# A buffer's indentation comes, as in Helix, from the first of: its
+# .editorconfig (editorconfig-load, with the editorconfig tool installed),
+# the file itself (detected as it's opened: tabs or spaces, and how many,
+# over the first 1000 lines), its language's default from languages.toml:
+# indent = { tab-width = 4, unit = "\t" } for C, C++, sh and markdown
+# (Helix's "bash" is Kakoune's "sh"), else Kakoune's global indentwidth and
+# tabstop. All per buffer; indent_width_from/tab_width_from say which one
+# set indentwidth/tabstop, so a language default never overrides the other
+# two, and goes again when the filetype changes to one without it.
+declare-option -hidden str indent_width_from
+declare-option -hidden str tab_width_from
 define-command -override -hidden lang-indent-c nop
 define-command -override -hidden lang-indent-cpp nop
 define-command -override -hidden lang-indent-sh nop
 define-command -override -hidden lang-indent-markdown nop
-hook -group kakrc global WinSetOption filetype=(c|cpp|sh|markdown) %{
-	set-option window tabstop 4
-	set-option window indentwidth 0
-	remove-hooks window lang-indent
-	hook -always -group lang-indent window WinSetOption filetype=.* %{
-		try %{ evaluate-commands "lang-indent-%opt{filetype}" } catch %{
-			remove-hooks window lang-indent
-			unset-option window tabstop
-			unset-option window indentwidth
+# (shell-free: these exist for the states they accept)
+define-command -override -hidden indent-free- nop
+define-command -override -hidden indent-undo-width-lang %{
+	unset-option buffer indentwidth
+	set-option buffer indent_width_from ''
+}
+define-command -override -hidden indent-undo-tab-lang %{
+	unset-option buffer tabstop
+	set-option buffer tab_width_from ''
+}
+define-command -override -hidden indent-lang %{
+	try %{ evaluate-commands "indent-undo-width-%opt{indent_width_from}" }
+	try %{ evaluate-commands "indent-undo-tab-%opt{tab_width_from}" }
+	try %{
+		evaluate-commands "lang-indent-%opt{filetype}"
+		try %{
+			evaluate-commands "indent-free-%opt{indent_width_from}"
+			set-option buffer indentwidth 0
+			set-option buffer indent_width_from lang
+		}
+		try %{
+			evaluate-commands "indent-free-%opt{tab_width_from}"
+			set-option buffer tabstop 4
+			set-option buffer tab_width_from lang
 		}
 	}
 }
+hook -group kakrc global BufSetOption filetype=.* indent-lang
+
+# At open (one shell): .editorconfig, else the file's own indentation. The
+# detection is Helix's in short: lines indented with tabs against lines
+# with spaces, and for spaces, the most common step up from one indented
+# line to the next (1 to 8; on a tie the smaller).
+define-command -override -hidden indent-detect %{
+	evaluate-commands %sh{
+		case $kak_buffile in /*) ;; *) exit ;; esac
+		w=
+		if command -v editorconfig >/dev/null 2>&1; then
+			props=$(editorconfig "$kak_buffile" 2>/dev/null)
+			case $props in *=*)
+				echo 'try %{ editorconfig-load }'
+				case $props in *indent_style=tab*|*indent_style=space*)
+					w=1; echo 'set-option buffer indent_width_from editorconfig' ;;
+				esac
+				case $props in *tab_width=*|*indent_size=*)
+					echo 'set-option buffer tab_width_from editorconfig' ;;
+				esac ;;
+			esac
+		fi
+		[ -z "$w" ] && [ -r "$kak_buffile" ] || exit
+		head -n 1000 -- "$kak_buffile" 2>/dev/null | awk '
+			/^[ \t]*$/ { next }
+			{
+				match($0, /^[ \t]*/); ws = substr($0, 1, RLENGTH)
+				if (ws ~ /^\t/) { tabs++; prev = -1; next }
+				if (ws ~ /\t/) { prev = -1; next }
+				n = length(ws); if (n > 0) spaces++
+				if (prev >= 0 && n > prev && n - prev <= 8) step[n - prev]++
+				prev = n
+			}
+			END {
+				if (tabs + spaces == 0) exit
+				if (tabs > spaces) { w = 0 }
+				else {
+					w = -1; best = 0
+					for (d = 1; d <= 8; d++) if (step[d] > best) { best = step[d]; w = d }
+					if (w < 0) exit
+				}
+				print "set-option buffer indentwidth " w
+				print "set-option buffer indent_width_from detected"
+			}'
+	}
+}
+hook -group kakrc global BufOpenFile .* indent-detect
+hook -group kakrc global BufNewFile  .* indent-detect
 
 # Helix's :config-reload: this file again, in the running session (see the
 # top). What it set per window or buffer as they were shown or typed in
