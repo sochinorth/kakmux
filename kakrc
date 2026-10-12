@@ -983,16 +983,31 @@ define-command -override -hidden -params .. line-diags-draw %{
 		digits=${#kak_buf_line_count}; [ "$digits" -ge 2 ] || digits=2
 		width=$((kak_window_width - digits - 3))
 		case $kak_opt_git_gutter_flags in *' '*) width=$((width - 1)) ;; esac
-		# a line that wraps puts its columns elsewhere on screen: then just
-		# the messages, from the left
-		if [ "$kak_opt_line_diags_eolcol" -gt "$width" ]; then
+		# a line that wraps puts its columns elsewhere on screen, and one
+		# too far right leaves too little room (under 20 columns) right of
+		# it: then just the messages, from the left. No line drawn here may
+		# be wider than the window: Kakoune 2026.05.21 spins (or crashes)
+		# wrapping lines below wider than the window. One too narrow for
+		# even that gets none.
+		flat=
+		[ "$kak_opt_line_diags_eolcol" -gt "$width" ] && flat=1
+		i=0
+		while [ "$i" -lt "$n" ]; do
+			eval "p=\$p_$i"; [ $((width - p - 2)) -ge 20 ] || flat=1
+			i=$((i + 1))
+		done
+		if [ -n "$flat" ]; then
 			i=0; while [ "$i" -lt "$n" ]; do eval "p_$i=0"; i=$((i + 1)); done
+		fi
+		if [ "$width" -lt 12 ]; then
+			echo 'set-option window line_diags_view %val{timestamp}'
+			echo 'set-option window line_diags_drawn 0'
+			exit
 		fi
 		text= i=0
 		while [ "$i" -lt "$n" ]; do
 			eval "p=\$p_$i f=\$f_$i m=\$m_$i"
 			w=$((width - p - 2))
-			[ "$w" -ge 20 ] || w=20
 			first=1
 			# word-wrapped to $w columns
 			while [ -n "$m" ]; do
@@ -1054,6 +1069,14 @@ define-command -override -hidden line-diags-idle %{
 hook -group kakrc global NormalIdle .* line-diags-idle
 hook -group kakrc global InsertIdle .* line-diags-idle
 hook -group kakrc global WinDisplay .* %{ set-option window line_diags_seen 0 }
+# and when the window changes size, now: the lines below were cut to the old
+# width. Left wider than the window, Kakoune 2026.05.21 can crash on them
+# ("cannot create std::vector larger than max_size()", shrinking a split
+# showing a long wrapped line's diagnostics).
+hook -group kakrc global WinResize .* %{
+	set-option window line_diags_seen 0
+	line-diags-idle
+}
 
 # kak-tree-sitter's text objects: <a-i>f, ]f etc. (f function, t type,
 # a argument, T test), and tree navigation (Helix's A-o/A-i...) in its mode
