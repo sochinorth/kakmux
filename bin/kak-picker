@@ -29,8 +29,12 @@
 # (pos): kakrc's picker-resume (<space>') opens it again from there, the
 # list as it was for kak-lsp's lists, made afresh for the others.
 #
+# Columns are as wide as the widest of what's on screen: fzf runs --layout
+# as the list or the window changes, and the list is laid out again when
+# that calls for other widths (see "columns" below).
+#
 # fzf calls back into this script as `kak-picker --legend|--list|--delete|
-# --grep|--wsym|--diff|--save ...`.
+# --grep|--wsym|--diff|--save|--layout ...`.
 #
 # Everything up to fzf runs in the shell itself, no other processes (each one
 # costs a millisecond or two), so the popup comes up at once.
@@ -40,6 +44,107 @@ tab=$(printf '\t')
 
 kq() { printf "'%s'" "$(printf %s "$1" | sed "s/'/''/g")"; }   # kak-quote
 send() { printf '%s\n' "$1" | kak -p "$session"; }
+
+# --- columns -------------------------------------------------------------------
+# An item of a list in columns ends in two fields: its cells' widths, then
+# the cells laid out, which fzf shows (--with-nth). Each column is as wide
+# as its widest cell in the rows on screen, two spaces apart, the last one
+# taking the rest; empty ones are left out. When they don't fit, the widest
+# gives way first (cut with a …, at the end, or at the start for an "l" in
+# SIDES, one letter per column but the last), the last column keeping up to
+# FRAC of the width. The width and height are fzf's ($FZF_COLUMNS, less the
+# preview's, and $FZF_LINES), or as worked out below for the first lines
+# (PICKER_AVAIL, PICKER_H). A kind's awk adds its rows with row(), and emit
+# prints them laid out for the first rows on screen, keeping them in ROWS
+# (hidden fields, widths, then the cells, \037 between them; last a line
+# \036TAG) and the widths in STATE, for --layout to lay them out again.
+# Awk with LC_ALL=C: lengths are in bytes, so ulen leaves out UTF-8's
+# continuation bytes to count characters.
+columns='
+function ulen(s) { gsub(/[\200-\277]/, "", s); return length(s) }
+# row(HIDDEN, CELL, WIDTH, ...): up to 3 cells, coloured, and their widths
+function row(h, c1, w1, c2, w2, c3, w3) {
+	R[++nr] = h
+	if (c3 != "" || w3 != "") { C[nr] = c1 "\037" c2 "\037" c3; W[nr] = w1 " " w2 " " w3 }
+	else { C[nr] = c1 "\037" c2; W[nr] = w1 " " w2 }
+}
+# S cut to N columns, a … in place of what is left out (side "l": at the
+# start), its SGR sequences all kept: text and sequences in turn, the text
+# kept from character SKIP + 1 to SKIP + KEEP
+function cut(s, n, side,   keep, skip, m, done, out, t, e, l, lo, hi) {
+	keep = n - 1; skip = side == "l" ? vlen(s) - keep : 0; m = done = 0; out = ""
+	while (s != "") {
+		if (match(s, /\033\[[0-9;]*m/)) { t = substr(s, 1, RSTART - 1); e = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH) }
+		else { t = s; e = s = "" }
+		l = ulen(t); lo = skip - m; hi = skip + keep - m
+		if (lo < 0) lo = 0
+		if (hi > l) hi = l
+		if (side == "l" && lo < l && m <= skip) out = out "…"
+		if (hi > lo) out = out usub(t, lo + 1, hi - lo)
+		if (side != "l" && m + l >= keep && !done) { out = out "…"; done = 1 }
+		out = out e; m += l
+	}
+	return out
+}
+# substr in characters
+function usub(s, i, n,   k, e, c, out) {
+	if (s !~ /[\200-\377]/) return substr(s, i, n)
+	out = ""; e = length(s)
+	for (k = 1; k <= e && n > 0; ) {
+		for (c = substr(s, k++, 1); k <= e && substr(s, k, 1) ~ /[\200-\277]/; k++) c = c substr(s, k, 1)
+		if (--i < 1) { out = out c; n-- }
+	}
+	return out
+}
+function vlen(s) { gsub(/\033\[[0-9;]*m/, "", s); return ulen(s) }
+function geom(   pc) {
+	if (ENVIRON["FZF_COLUMNS"] != "") {
+		pc = ENVIRON["FZF_PREVIEW_COLUMNS"] + 0
+		AVAIL = ENVIRON["FZF_COLUMNS"] - 2 - (pc ? pc + 5 : 0); H = ENVIRON["FZF_LINES"] - 2
+	} else { AVAIL = ENVIRON["PICKER_AVAIL"] + 0; H = ENVIRON["PICKER_H"] + 0 }
+	if (H < 1) H = 1
+	SP = sprintf("%" AVAIL "s", "")
+}
+# the column widths for the rows whose cells have widths V[1..nv]: WD[], and
+# as "w1,w2,"
+function widths(   i, j, n, f, M, l, nc, room, L, sum, out) {
+	nc = 0; split("", WD)
+	for (i = 1; i <= nv; i++) {
+		n = split(V[i], f, " "); if (n > nc) nc = n
+		for (j = 1; j <= n; j++) if (f[j] > M[j]) M[j] = f[j] + 0
+	}
+	l = M[nc] + 0; if (l > int(AVAIL * FRAC)) l = int(AVAIL * FRAC)
+	room = AVAIL - l; sum = L = 0
+	for (j = 1; j < nc; j++) if (M[j] > 0) { room -= 2; sum += M[j]; if (M[j] > L) L = M[j] }
+	while (sum > room && L > 1) {
+		L--; sum = 0
+		for (j = 1; j < nc; j++) sum += M[j] < L ? M[j] : L
+	}
+	out = ""
+	for (j = 1; j < nc; j++) { WD[j] = M[j] < L ? M[j] + 0 : L; out = out WD[j] "," }
+	return out
+}
+# CELLS of widths WIDTHS laid out in the columns WD[]
+function render(cells, widths,   n, f, w, j, out) {
+	n = split(cells, f, "\037"); split(widths, w, " "); out = ""
+	for (j = 1; j < n; j++)
+		if (WD[j]) out = out (w[j] > WD[j] ? cut(f[j], WD[j], substr(SIDES, j, 1)) : f[j] substr(SP, 1, WD[j] - w[j])) "  "
+	return out f[n]
+}
+function emit(   i, w) {
+	geom(); nv = 0
+	for (i = 1; i <= nr && i <= H; i++) V[++nv] = W[i]
+	w = widths()
+	for (i = 1; i <= nr; i++) {
+		print R[i] "\t" W[i] "\t" render(C[i], W[i])
+		if (ROWS != "") print R[i] "\t" W[i] "\t" C[i] > ROWS
+	}
+	if (ROWS != "") { print "\036" TAG > ROWS; close(ROWS) }
+	if (STATE != "") { print w "\t0" > STATE; close(STATE) }
+}
+# text for a cell: no tabs, escapes or \037 in it
+function cell(s) { gsub(/[\t\033\037]/, " ", s); return s }
+'
 
 # the buffers, in order of N (gaps where ctrl-d closed one)
 list_buffers() {
@@ -62,16 +167,21 @@ list_buffers() {
 	done
 }
 
-# format_locations ROOT TYPE ONLY [WSROOT]: `path:line:column:text` lines
-# (stdin) to fzf items, `absolute path<TAB>line<TAB>column<TAB>shown`. TYPE is
-# kak-lsp's kind of list: diagnostics show their severity, document symbols
-# ("%" for the file named on the first line) their name first. ONLY keeps one
-# file. Paths show from WSROOT (else from ROOT as given; ~ for $HOME).
+# format_locations ROOT TYPE ONLY WSROOT ROWS TAG: `path:line:column:text`
+# lines (stdin) to fzf items, `absolute path<TAB>line<TAB>column<TAB>widths
+# <TAB>shown`, in columns (see columns: kept in ROWS, if given, as for TAG,
+# the widths in the cols file beside it).
+# TYPE is kak-lsp's kind of list: diagnostics show their severity first and
+# their place last, document symbols ("%" for the file named on the first
+# line) their name first, the rest their place first. ONLY keeps one file.
+# Paths show from WSROOT (else from ROOT as given; ~ for $HOME).
 # Colours come from the PICKER_* SGR sequences (set below, exported).
 format_locations() {
-	awk -v root="$1" -v type="$2" -v only="$3" -v ws="${4:+$4/}" -v home="${HOME:+$HOME/}" \
+	location_columns "$2"
+	LC_ALL=C awk -v root="$1" -v type="$2" -v only="$3" -v ws="${4:+$4/}" -v home="${HOME:+$HOME/}" \
+		-v ROWS="$5" -v TAG="$6" -v STATE="${5:+${5%/*}/cols}" -v SIDES="$sides" -v FRAC="$frac" \
 		-v dim="$PICKER_DIM" -v fg="$PICKER_FG" -v bold="$PICKER_BOLD" -v unbold="$PICKER_UNBOLD" \
-		-v err="$PICKER_ERROR" -v warn="$PICKER_WARNING" -v info="$PICKER_INFO" -v hint="$PICKER_HINT" '
+		-v err="$PICKER_ERROR" -v warn="$PICKER_WARNING" -v info="$PICKER_INFO" -v hint="$PICKER_HINT" "$columns"'
 	type == "lsp-document-symbol" && NR == 1 { file = $0; next }
 	match($0, /^[^:]+:[0-9]+:[0-9]+:/) {
 		head = substr($0, 1, RLENGTH - 1); text = substr($0, RLENGTH + 1)
@@ -80,10 +190,11 @@ format_locations() {
 		if (path == "%") path = file
 		abs = path ~ /^\// ? path : root "/" path
 		if (only != "" && abs != only) next
-		gsub(/\t/, "    ", text); sub(/^[ ]+/, "", text); sub(/[ \r]+$/, "", text)
+		gsub(/\t/, "    ", text); sub(/^[ ]+/, "", text); sub(/[ \r]+$/, "", text); text = cell(text)
 		if (ws != "" && substr(abs, 1, length(ws)) == ws) path = substr(abs, length(ws) + 1)
 		else if (path ~ /^\// && home != "" && substr(path, 1, length(home)) == home) path = "~/" substr(path, length(home) + 1)
-		loc = bold path ":" lc[1] unbold
+		path = cell(path); loc = bold path ":" lc[1] unbold; lw = ulen(path) + 1 + length(lc[1])
+		h = abs "\t" lc[1] "\t" lc[2]
 		if (type == "lsp-diagnostics") {
 			# [severity][server][source][code] message; related locations
 			# (lines without a severity) left out
@@ -91,19 +202,30 @@ format_locations() {
 			sev = substr(text, 2); sub(/\].*/, "", sev)
 			while (text ~ /^\[[^] ]*\]/) sub(/^\[[^] ]*\]/, "", text)
 			sub(/^ +/, "", text)
+			tw = ulen(text)
 			c = sev == "error" ? err : sev == "warning" ? warn : sev == "info" ? info : hint
-			shown = c sprintf("%-7s", sev) fg " " text "  " loc
-		} else if (type == "lsp-document-symbol") shown = text "  " loc
-		else shown = loc "  " text
-		print abs "\t" lc[1] "\t" lc[2] "\t" shown
-	}'
+			row(h, c sev, length(sev), fg text, tw, loc, lw)
+		} else if (type == "lsp-document-symbol") row(h, text, ulen(text), loc, lw)
+		else row(h, loc, lw, text, ulen(text))
+	}
+	END { emit() }'
 }
-
+# location_columns TYPE: $sides and $frac for its columns (see columns):
+# paths cut at their start, places at the end kept whole when they can be
+location_columns() {
+	case $1 in
+	lsp-diagnostics) sides=rr frac=0.5 ;;
+	lsp-document-symbol) sides=r frac=0.5 ;;
+	*) sides=l frac=0.4 ;;
+	esac
+}
 case $1 in
---grep)     # QUERY: ripgrep's matches under the cwd
+--grep)     # QUERY: ripgrep's matches under the cwd (and in $PICKER_DIR/rows)
 	[ -n "$2" ] || exit 0
+	rows=${PICKER_DIR:?}/rows.$$
 	rg --column --line-number --no-heading --color never --smart-case -e "$2" 2>/dev/null |
-		head -n 10000 | format_locations "$PWD" grep ''
+		head -n 10000 | format_locations "$PWD" grep '' '' "$rows" "$2"
+	mv -f -- "$rows" "$PICKER_DIR/rows"
 	exit ;;
 --wsym)     # DIR SESSION CLIENT QUERY: the server's symbols matching QUERY
 	dir=$2 session=$3 client=$4
@@ -117,7 +239,8 @@ case $1 in
 	[ -e "$out" ] || exit 0
 	IFS= read -r root < "$out.root"
 	ws=; [ -e "$dir/wsroot" ] && IFS= read -r ws < "$dir/wsroot"
-	format_locations "$root" lsp-workspace-symbol '' "$ws" < "$out"
+	format_locations "$root" lsp-workspace-symbol '' "$ws" "$dir/rows.$$" "$5" < "$out"
+	mv -f -- "$dir/rows.$$" "$dir/rows"
 	rm -f -- "$out" "$out.root"
 	exit ;;
 --diff)     # FILE: its changes since HEAD (or all of it, if untracked)
@@ -269,6 +392,55 @@ case $1 in
 	printf '%s\n' "$FZF_QUERY" > "$2/query"
 	printf '%s\n' "${FZF_POS:-1}" > "$2/pos"
 	exit ;;
+--layout)   # DIR SIDES FRAC MATCHED: on fzf's result, focus and resize
+            # events (MATCHED: a file of the items that match, in order), the
+            # list laid out again (fzf's action printed) if the rows on screen
+            # call for other widths than DIR/cols's (widths, scroll offset,
+            # and against flip-flopping: what the last relayout was for, and
+            # how many in a row were for it). Lists from a search (grep,
+            # workspace symbols) only once DIR/rows is the one for the query.
+	LC_ALL=C exec awk -v dir="$2" -v SIDES="$3" -v FRAC="$4" -v matched="$5" "$columns"'
+	# The rows on screen are from the scroll offset, which fzf does not
+	# tell: as fzf does, by as little from where it was as keeps the cursor
+	# (CY) on screen and 3 rows (scroll-off) from the edges
+	function scroll(off, cy, count,   so, hi) {
+		hi = count - H; if (hi < 0) hi = 0
+		if (cy > count - 1) cy = count - 1
+		if (cy < 0) cy = 0
+		so = int((H - 1) / 2); if (so > 3) so = 3
+		if (off < cy - H + 1 + so) off = cy - H + 1 + so
+		if (off > cy - so) off = cy - so
+		if (off > hi) off = hi
+		return off < 0 ? 0 : off
+	}
+	BEGIN {
+		geom(); state = dir "/cols"
+		if ((getline l < state) > 0) split(l, S, "\t")
+		close(state)
+		off = scroll(S[2] + 0, ENVIRON["FZF_POS"] - 1, ENVIRON["FZF_MATCH_COUNT"] + 0)
+		for (k = 0; k < off + H && (getline l < matched) > 0; )
+			if (++k > off) { sub(/\t[^\t]*$/, "", l); sub(/.*\t/, "", l); V[++nv] = l }
+		w = S[1]; key = ENVIRON["FZF_QUERY"] "\035" ENVIRON["FZF_POS"] "\035" AVAIL "\035" H
+		tries = S[4] + 0; alt = S[5] + 0
+		if (nv && (nw = widths()) != w && (key != S[3] || tries < 2)) {
+			rows = dir "/rows"
+			while ((getline l < rows) > 0) RW[++n] = l
+			if (n && RW[n] == "\036" (ENVIRON["FZF_INPUT_STATE"] == "disabled" ? ENVIRON["FZF_QUERY"] : "")) {
+				# (two files in turn: a reload still reading the last one is
+				# only stopped when fzf starts this one)
+				alt = 1 - alt; out = dir "/shown." alt
+				for (i = 1; i < n; i++) {
+					k = split(RW[i], f, "\t"); c = f[k]
+					print substr(RW[i], 1, length(RW[i]) - length(c)) render(c, f[k - 1]) > out
+				}
+				close(out)
+				print "reload-sync:cat \047" out "\047"
+				w = nw; tries = key == S[3] ? tries + 1 : 1; S[3] = key
+			}
+		}
+		printf "%s\t%d\t%s\t%d\t%d\n", w, off, S[3], tries, alt > state
+	}'
+	;;
 --legend)   # ROWS: draw $PICKER_LEGEND on the popup's last row
 	printf '\0337\033[%d;1H%s\033[K\033[0m\0338' "$2" "$PICKER_LEGEND" >/dev/tty
 	exit ;;
@@ -362,7 +534,7 @@ export PICKER_DIM PICKER_FG PICKER_BOLD PICKER_UNBOLD PICKER_ERROR PICKER_WARNIN
 
 # --- per-kind setup -----------------------------------------------------------
 # reopened (picker-resume): what was typed, and where the cursor was
-query= pos=
+query= pos= pct= relayout=
 [ -e "$dir/query" ] && IFS= read -r query < "$dir/query"
 [ -e "$dir/pos" ] && read -r pos < "$dir/pos"
 
@@ -401,10 +573,12 @@ files)
 	open() { printf '%s\n' "edit -- $(kq "$PWD/$1")"; } ;;
 locations|grep|workspace-symbols|changed)
 	legend='enter:open ctrl-s:split-below ctrl-v/alt-v:split-right'
+	pct=55
 	set -- \
-		--ansi --delimiter '\t' --with-nth 4 \
+		--ansi --delimiter '\t' --with-nth 5 \
 		--preview "bat --color=always --style=numbers --highlight-line {2} -- {1}" \
-		--preview-window 'right,55%,+{2}-/2'
+		--preview-window "right,$pct%,+{2}-/2"
+	location_columns "$kind"
 	case $kind in
 	locations)
 		IFS= read -r root < "$dir/root"
@@ -418,8 +592,9 @@ locations|grep|workspace-symbols|changed)
 		*) title=${title#\*}; title=${title%\*}; [ "$title" = goto ] && title=locations ;;
 		esac
 		set -- "$@" --no-sort
+		location_columns "$type"
 		# (the files have no final newline: the last line is read anyway)
-		items() { { cat "$dir/list"; echo; } | format_locations "$root" "$type" "$only" "$ws"; } ;;
+		items() { { cat "$dir/list"; echo; } | format_locations "$root" "$type" "$only" "$ws" "$dir/rows" ''; } ;;
 	grep)
 		title="global search · ${PWD##*/}"
 		set -- "$@" --disabled --prompt '/ ' \
@@ -438,6 +613,7 @@ locations|grep|workspace-symbols|changed)
 			echo "kak-picker: not in a git repository" >&2; exit 1; }
 		cd "$root" || exit
 		set -- "$@" --preview "'$self' --diff {1}" --preview-window 'right,60%'
+		sides=
 		# `XY path`, NUL-ended (-z: paths as they are, not C-quoted), a
 		# rename's or copy's old path next: + new, - deleted, ~ changed.
 		# (Names with a newline in them aren't handled.)
@@ -451,10 +627,11 @@ locations|grep|workspace-symbols|changed)
 				R*) mark="$git_mod→" ;;
 				*) mark="$git_mod~" ;;
 				esac
-				printf '%s\t1\t1\t%s %s%s\n' "$root/$path" "$mark" "$PICKER_FG" "$path"
+				printf '%s\t1\t1\t\t%s %s%s\n' "$root/$path" "$mark" "$PICKER_FG" "$path"
 			done
 		} ;;
 	esac
+	[ -z "$sides" ] || relayout="$sides $frac"
 	open() {
 		file=${1%%"$tab"*} r=${1#*"$tab"} line=${r%%"$tab"*} r=${r#*"$tab"} col=${r%%"$tab"*}
 		printf '%s\n' "edit -existing -- $(kq "$file") $line $col"
@@ -468,9 +645,13 @@ commands)
 	title=commands
 	legend='enter:run/prompt'
 	sgr "$accent" 3; PICKER_ACCENT="$esc[${v}m"
-	set -- --ansi --delimiter '\t' --with-nth 4 --no-preview --tiebreak begin
+	set -- --ansi --delimiter '\t' --with-nth 5 --no-preview --tiebreak begin
+	# name (aliases), keys, docstring; a name cut at its end, the
+	# docstring keeping up to a third of the width
+	sides=rr frac=0.33; relayout="$sides $frac"
 	items() {
-		LC_ALL=C awk -v dim="$PICKER_DIM" -v fg="$PICKER_FG" -v acc="$PICKER_ACCENT" '
+		LC_ALL=C awk -v dim="$PICKER_DIM" -v fg="$PICKER_FG" -v acc="$PICKER_ACCENT" \
+			-v ROWS="$dir/rows" -v STATE="$dir/cols" -v SIDES="$sides" -v FRAC="$frac" "$columns"'
 		# key names to the keys typed
 		function keys(k) {
 			gsub(/<minus>/, "-", k); gsub(/<space>/, " ", k); gsub(/<semicolon>/, ";", k)
@@ -479,8 +660,6 @@ commands)
 			gsub(/<lt>/, "<", k); gsub(/<gt>/, ">", k)
 			return k
 		}
-		# S in N columns: cut with a … if longer, else padded
-		function col(s, n) { return length(s) > n ? substr(s, 1, n - 1) "…" : sprintf("%-" n "s", s) }
 		FILENAME ~ /\/ok$/ { for (i = 1; i <= NF; i++) OK[$i] = 1; next }
 		FILENAME ~ /\/cmds$/ {
 			split($0, f, "\t")
@@ -498,7 +677,7 @@ commands)
 				if (substr(s, 1, 1) == "\047") { rhs = rhs "\047"; s = substr(s, 2) } else break
 			}
 			sub(/^ /, "", s)
-			M[++nm] = mode; K[nm] = key; R[nm] = rhs; D[nm] = s
+			M[++nm] = mode; K[nm] = key; RHS[nm] = rhs; D[nm] = s
 		}
 		END {
 			# how each mode is entered: the built-in ones, and user modes
@@ -506,7 +685,7 @@ commands)
 			PRE["normal"] = ""; PRE["user"] = "<space>"; PRE["goto"] = "g"; PRE["view"] = "v"; PRE["object"] = "<a-i>"
 			for (pass = 0; pass < 3; pass++)
 				for (i = 1; i <= nm; i++) {
-					r = keys(R[i])
+					r = keys(RHS[i])
 					if (!(M[i] in PRE) || !match(r, /^:enter-user-mode( -lock)? [^ ]+<ret>$/)) continue
 					um = r; sub(/<ret>$/, "", um); sub(/.* /, "", um)
 					p = PRE[M[i]] K[i]
@@ -514,7 +693,7 @@ commands)
 				}
 			for (i = 1; i <= nm; i++) {
 				if (M[i] == "insert" || M[i] == "prompt" || M[i] == "menu" || !(M[i] in PRE)) continue
-				r = keys(R[i]); sub(/^<esc>/, "", r)
+				r = keys(RHS[i]); sub(/^<esc>/, "", r)
 				k = PRE[M[i]] K[i]
 				c = r; if (sub(/^:/, "", c) && sub(/<ret>$/, "", c) && (c in MIN)) {
 					BOUND[c] = BOUND[c] (BOUND[c] == "" ? "" : " ") k; continue
@@ -522,19 +701,20 @@ commands)
 				if (M[i] == "normal" && D[i] == "") continue
 				if (r ~ /^:enter-user-mode /) continue
 				show = r; sub(/<ret>$/, "", show)
-				MROW[++nr] = sprintf("m\t%s\t0\t%s%s %s%s %s%s", R[i], fg, col(show, 30), acc, col(k, 12), dim, D[i])
+				MR[++nr2] = RHS[i]; MS[nr2] = cell(show); MK[nr2] = cell(k); MD[nr2] = cell(D[i])
 			}
 			# commands with keys, the other mappings, the other commands
 			for (pass = 1; pass >= 0; pass--) {
 				for (i = 1; i <= nc; i++) {
 					c = NAME[i]
 					if ((BOUND[c] != "") != pass) continue
-					n = c (AL[c] != "" ? " (" AL[c] ")" : ""); n = col(n, 30)
-					if (AL[c] != "") sub(/ \(/, " " dim "(", n)
-					printf "c\t%s\t%s\t%s%s %s%s %s%s\n", c, MIN[c], fg, n, acc, col(BOUND[c], 12), dim, DOC[c]
+					n = cell(c); al = AL[c] != "" ? " (" cell(AL[c]) ")" : ""; k = cell(BOUND[c]); d = cell(DOC[c])
+					row("c\t" c "\t" MIN[c], fg n (al != "" ? dim al : ""), ulen(n al), acc k, ulen(k), dim d, ulen(d))
 				}
-				if (pass) for (i = 1; i <= nr; i++) print MROW[i]
+				if (pass) for (i = 1; i <= nr2; i++)
+					row("m\t" MR[i] "\t0", fg MS[i], ulen(MS[i]), acc MK[i], ulen(MK[i]), dim MD[i], ulen(MD[i]))
 			}
+			emit()
 		}' "$dir/ok" "$dir/cmds" "$dir/mappings"
 	}
 	open() {
@@ -565,7 +745,22 @@ export PICKER_LEGEND
 # The popup is borderless: fzf draws the frame (title on top, where warnings
 # also go) in all but the last row, and the legend sits under it as plain text.
 # fzf clears that row on startup, so the legend is drawn from its start event.
-rows=$(stty size </dev/tty); rows=${rows%% *}
+size=$(stty size </dev/tty); rows=${size%% *} cols=${size##* }
+
+# Lists in columns: laid out first for the first rows, as fzf will draw them
+# (inside the frame and its padding, less the prompt's two rows and the
+# preview's width, a share of the rest, and the pointer's two columns), and
+# again by --layout as they change. Lines stay put rather than scroll to a
+# match past the edge (--no-hscroll), which would leave the columns.
+if [ -n "$relayout" ]; then
+	inner=$((cols - 4))
+	PICKER_H=$((rows - 5)) PICKER_AVAIL=$((inner - 2))
+	[ -n "$pct" ] && PICKER_AVAIL=$((inner - inner * pct / 100 - 3))
+	PICKER_DIR=$dir
+	export PICKER_H PICKER_AVAIL PICKER_DIR
+	set -- "$@" --no-hscroll \
+		--bind "result,focus,resize:transform:'$self' --layout '${dir:?}' $relayout {*f}"
+fi
 
 # ESCDELAY: how long fzf waits after an Escape for the rest of a key sequence
 # before taking it as the Escape key (100 ms by default, which esc-to-close
