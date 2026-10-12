@@ -3278,27 +3278,45 @@ map global user <quote> ':picker-resume<ret>' -docstring 'last picker again'
 define-command -override buffer-picker -docstring 'fuzzy-pick a buffer (tmux popup)' %{
 	evaluate-commands %sh{
 		dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-picker.XXXXXX") || exit
-		# most recent first, then any buffer never displayed yet
-		{
-			eval "set -- $kak_quoted_opt_buffer_mru"
-			for b; do printf '%s\n' "$b"; done | tac
-			eval "set -- $kak_quoted_buflist"
-			for b; do printf '%s\n' "$b"; done
-		} | awk '!seen[$0]++' > "${dir:?}/order"
-		n=0
-		while IFS= read -r b; do
-			# skip names gone from the buflist (closed buffers left in the MRU)
-			eval "set -- $kak_quoted_buflist"
-			found=; for x; do [ "$x" = "$b" ] && found=1 && break; done
-			[ -n "$found" ] && [ "$b" != '*debug*' ] || continue
-			printf %s "$b" > "${dir:?}/${n:?}.name"
+		# All in the shell, no process per buffer. STR with each A in it
+		# made B, in $r
+		rep() {
+			r= rest=$3
+			while :; do
+				case $rest in
+				*"$1"*) r="$r${rest%%"$1"*}$2" rest=${rest#*"$1"} ;;
+				*) r=$r$rest; return ;;
+				esac
+			done
+		}
+		nl='
+'
+		# each buffer once, but *debug*: B's files and the commands
+		# writing its cursor line, modified flag and text there
+		n=0 seen=$nl
+		add() {
+			case $seen in *"$nl$1$nl"*) return ;; esac
+			seen="$seen$1$nl"
+			[ "$1" != '*debug*' ] || return
+			printf %s "$1" > "${dir:?}/${n:?}.name"
 			# -buffer takes a comma-separated list: escape \ and , in the name
-			q=$(printf %s "$b" | sed 's/\\/\\\\/g; s/,/\\,/g' | sed "s/'/''/g")
+			rep '\' '\\' "$1"; rep , '\,' "$r"; rep "'" "''" "$r"
 			printf "evaluate-commands -buffer '%s' %%{ echo -to-file '%s' %%opt{picker_line} %%val{modified}; execute-keys '%%'; echo -to-file '%s' %%val{selection} }\n" \
-				"$q" "${dir:?}/${n:?}.meta" "${dir:?}/${n:?}"
+				"$r" "${dir:?}/${n:?}.meta" "${dir:?}/${n:?}"
 			n=$((n + 1))
-		done < "${dir:?}/order"
-		rm -f -- "${dir:?}/order"
+		}
+		eval "set -- $kak_quoted_buflist"
+		open=$nl; for b; do open="$open$b$nl"; done
+		# most recent first (closed buffers left in the MRU skipped), then
+		# any buffer never displayed yet
+		eval "set -- $kak_quoted_opt_buffer_mru"
+		i=$#
+		while [ "$i" -gt 0 ]; do
+			eval "b=\${$i}"; i=$((i - 1))
+			case $open in *"$nl$b$nl"*) add "$b" ;; esac
+		done
+		eval "set -- $kak_quoted_buflist"
+		for b; do add "$b"; done
 		echo "picker-open buffers '${dir:?}'"
 	}
 }
