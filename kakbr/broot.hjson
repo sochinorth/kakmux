@@ -1,0 +1,14 @@
+# broot for kakbr's sidebar (kakbr-sidebar passes it with --conf): the main
+# config (~/.config/broot/conf.hjson, imported: verbs, skins and all), with
+# git always on, whatever default_flags the main one ends up with. Each
+# file is marked with its git status (M, N...) left of the tree; :gs shows
+# only those (and :gs again, no git at all: broot's toggle). The branch and
+# +/- line counts follow the root's path on broot's top line, where there's
+# room: in the sidebar's 24..40 columns there rarely is, and broot can't
+# shorten that line; kak's status line beside it shows them instead.
+{
+	imports: [
+		../broot/conf.hjson
+	]
+	default_flags: g
+}

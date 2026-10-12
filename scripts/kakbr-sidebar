@@ -24,7 +24,10 @@ fit() {
 # broot runs as a child (no job control, so it stays in the terminal's
 # foreground process group) and this shell gets every SIGWINCH alongside it.
 # KAKBR_SESSION (from kakbr) tells broot-open it's the sidebar; the opener dir
-# routes double-click there.
+# routes double-click there. kakbr's broot.hjson (the main config, git on)
+# when it's there.
+conf=${XDG_CONFIG_HOME:-$HOME/.config}/kakbr/broot.hjson
+[ -e "$conf" ] && set -- --conf "$conf" "$@"
 PATH="$HOME/.local/lib/broot-opener:$PATH" broot "$@" </dev/tty >/dev/tty &
 pid=$!
 
