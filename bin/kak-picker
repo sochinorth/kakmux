@@ -70,7 +70,7 @@ list_buffers() {
 # Colours come from the PICKER_* SGR sequences (set below, exported).
 format_locations() {
 	awk -v root="$1" -v type="$2" -v only="$3" -v ws="${4:+$4/}" -v home="${HOME:+$HOME/}" \
-		-v dim="$PICKER_DIM" -v fg="$PICKER_FG" \
+		-v dim="$PICKER_DIM" -v fg="$PICKER_FG" -v bold="$PICKER_BOLD" -v unbold="$PICKER_UNBOLD" \
 		-v err="$PICKER_ERROR" -v warn="$PICKER_WARNING" -v info="$PICKER_INFO" -v hint="$PICKER_HINT" '
 	type == "lsp-document-symbol" && NR == 1 { file = $0; next }
 	match($0, /^[^:]+:[0-9]+:[0-9]+:/) {
@@ -83,7 +83,7 @@ format_locations() {
 		gsub(/\t/, "    ", text); sub(/^[ ]+/, "", text); sub(/[ \r]+$/, "", text)
 		if (ws != "" && substr(abs, 1, length(ws)) == ws) path = substr(abs, length(ws) + 1)
 		else if (path ~ /^\// && home != "" && substr(path, 1, length(home)) == home) path = "~/" substr(path, length(home) + 1)
-		loc = dim path ":" lc[1] fg
+		loc = bold path ":" lc[1] unbold
 		if (type == "lsp-diagnostics") {
 			# [severity][server][source][code] message; related locations
 			# (lines without a severity) left out
@@ -298,10 +298,14 @@ trap 'exit 1' HUP INT TERM
 # A face line reads ` * Name: fg,bg,underline[+attrs]`; the last one for a
 # face counts. Colours left at "default" fall back down the chain:
 # MenuBackground -> Default -> terminal. These helpers set $v.
+# PickerBackground (kakrc's own face; colour schemes may set it) is the
+# list's and preview's background, a shade off the editor's so the popup
+# reads as one with it; without it, MenuBackground's.
 
 while IFS= read -r l; do
 	case $l in
 	' * Default: '*|' * MenuBackground: '*|' * MenuForeground: '*|' * LineNumbers: '*|\
+	' * PickerBackground: '*|' * comment: '*|\
 	' * InlayDiagnostic'*|' * GitGutter'*)
 		n=${l#' * '}; eval "face_${n%%: *}=\${n#*: }" ;;
 	esac
@@ -332,14 +336,21 @@ fg Default default; dfg=$v; bg Default default; dbg=$v
 fg MenuBackground "$dfg"; mfg=$v; bg MenuBackground "$dbg"; mbg=$v   # list, preview, frame
 fg MenuForeground "$mbg"; sfg=$v; bg MenuForeground "$mfg"; sbg=$v   # selected row
 accent=$sbg                                                         # matches, prompt, keys
-fg LineNumbers "$mfg"; dim=$v                                       # counts, separators
+bg PickerBackground "$mbg"; mbg=$v                                  # list, preview (as above)
+# counts, separators, docstrings: comments' colour, which schemes keep
+# readable on the background (LineNumbers' is often all but invisible)
+fg LineNumbers "$mfg"; fg comment "$v"; dim=$v
 # as fzf colours
 c "$mfg"; cmfg=$v; c "$mbg"; cmbg=$v; c "$sfg"; csfg=$v; c "$sbg"; csbg=$v
 c "$accent"; caccent=$v; c "$dim"; cdim=$v
 
 # SGR sequences for the lists (format_locations, and the callbacks fzf runs)
 esc=$(printf '\033')
-sgr "$dim" 3; PICKER_DIM="$esc[${v}m"; sgr "$mfg" 3; PICKER_FG="$esc[${v}m"
+# The text colour is the terminal default (39), which fzf draws as fg, or as
+# fg+ on the selected row: an explicit colour would stay as it is on the
+# selected row's background. Paths are bold rather than coloured, likewise.
+sgr "$dim" 3; PICKER_DIM="$esc[${v}m"; PICKER_FG="$esc[39m"
+PICKER_BOLD="$esc[1m" PICKER_UNBOLD="$esc[22m"
 fg InlayDiagnosticError red; sgr "$v" 3; PICKER_ERROR="$esc[${v}m"
 fg InlayDiagnosticWarning yellow; sgr "$v" 3; PICKER_WARNING="$esc[${v}m"
 fg InlayDiagnosticInfo blue; sgr "$v" 3; PICKER_INFO="$esc[${v}m"
@@ -347,7 +358,7 @@ fg InlayDiagnosticHint green; sgr "$v" 3; PICKER_HINT="$esc[${v}m"
 fg GitGutterAdd green; sgr "$v" 3; git_add="$esc[${v}m"
 fg GitGutterModify yellow; sgr "$v" 3; git_mod="$esc[${v}m"
 fg GitGutterDelete red; sgr "$v" 3; git_del="$esc[${v}m"
-export PICKER_DIM PICKER_FG PICKER_ERROR PICKER_WARNING PICKER_INFO PICKER_HINT
+export PICKER_DIM PICKER_FG PICKER_BOLD PICKER_UNBOLD PICKER_ERROR PICKER_WARNING PICKER_INFO PICKER_HINT
 
 # --- per-kind setup -----------------------------------------------------------
 # reopened (picker-resume): what was typed, and where the cursor was

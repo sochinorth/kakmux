@@ -167,7 +167,9 @@ evaluate-commands %sh{
 
 # Faces this kakrc draws with, for colour schemes that don't set them: the
 # hover/completion docs kak-lsp writes in markup, the status line's mode,
-# git and diagnostic counts, the git gutter. Kept beside the plugins' defaults above.
+# git and diagnostic counts, the git gutter, the pickers' background (a linked
+# face reads as default in the faces dump, so kak-picker falls back to
+# MenuBackground's colour). Kept beside the plugins' defaults above.
 declare-option -hidden str kakrc_faces
 set-option global kakrc_faces %{
 set-face global InfoDefault Information
@@ -196,6 +198,7 @@ set-face global GitGutterModify yellow
 set-face global GitGutterDelete red
 set-face global IndentGuide Whitespace
 set-face global IndentGuideActive +d@Default
+set-face global PickerBackground MenuBackground
 }
 evaluate-commands %opt{plugin_faces}
 evaluate-commands %opt{kakrc_faces}
