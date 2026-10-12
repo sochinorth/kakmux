@@ -2051,6 +2051,71 @@ define-command -override -hidden smart-case-arm-now %{
 	hook -group smart-case window RawKey '<(?!space>)(?!lt>)(?!gt>)(?!minus>)(?!plus>)(?!semicolon>)(?!percent>)(?!dquote>)(?!quote>)(?!backtick>)(?!backslash>)(?!pipe>)(?!backspace>)(?!ret>)(?!esc>).+>' smart-case-disarm
 }
 
+# --- auto-pairs ----------------------------------------------------------------
+# Helix's auto-pairs, for () [] {} "" '' ``: typing an opener adds its closer
+# after the cursor when what follows is a blank, a closing bracket or the
+# line's end (for a quote, also not right after a word character: an
+# apostrophe); typing a closer, or a quote, that's next already steps over
+# it; <backspace> in an empty pair deletes both. With several selections,
+# only if that holds for every one. autopairs-toggle turns it off and on
+# (the option can be set per buffer or window too). Keys run from an
+# insert-mode hook go to insert mode, as if typed (without hooks).
+declare-option -docstring 'auto-pairs: close brackets and quotes as they''re typed' \
+	bool autopairs_enabled true
+define-command -override autopairs-toggle -docstring 'autopairs-toggle: auto-pairs on/off' %{
+	evaluate-commands %sh{
+		[ "$kak_opt_autopairs_enabled" = true ] && v=false || v=true
+		echo "set-option global autopairs_enabled $v; echo -markup '{Information}auto-pairs: $v'"
+	}
+}
+define-command -override -hidden autopairs-on-true nop
+declare-option -hidden int autopairs_n
+define-command -override -hidden autopairs-none-0 nop
+# autopairs-all KEYS REGEX: fails unless, KEYS from each cursor, every
+# selection matches REGEX
+define-command -override -hidden -params 2 autopairs-all %{
+	evaluate-commands -draft %{
+		execute-keys %arg{1}
+		set-option window autopairs_n %val{selection_count}
+		execute-keys "<a-k>%arg{2}<ret>"
+		set-option -remove window autopairs_n %val{selection_count}
+		evaluate-commands "autopairs-none-%opt{autopairs_n}"
+	}
+}
+# an opener typed: its closer after it, if blank, a closer or the end is next
+define-command -override -hidden -params 1 autopairs-open %{
+	evaluate-commands "autopairs-on-%opt{autopairs_enabled}"
+	autopairs-all ';' '[\s)\]\x7d]'
+	execute-keys "%arg{1}<left>"
+}
+# a closer typed (or the opener deleted): the same one next, gone
+define-command -override -hidden -params 1 autopairs-close %{
+	evaluate-commands "autopairs-on-%opt{autopairs_enabled}"
+	autopairs-all ';' "\Q%arg{1}\E"
+	execute-keys <del>
+}
+define-command -override -hidden -params 1 autopairs-quote %{
+	try %{ autopairs-close %arg{1} } catch %{
+		autopairs-all ';hh' '\W'
+		autopairs-open %arg{1}
+	}
+}
+hook -group kakrc global InsertChar \(  %{ try %{ autopairs-open ')' } }
+hook -group kakrc global InsertChar \[  %{ try %{ autopairs-open ']' } }
+hook -group kakrc global InsertChar \{  %[ try %[ autopairs-open '}' ] ]
+hook -group kakrc global InsertChar \)  %{ try %{ autopairs-close ')' } }
+hook -group kakrc global InsertChar \]  %{ try %{ autopairs-close ']' } }
+hook -group kakrc global InsertChar \}  %[ try %[ autopairs-close '}' ] ]
+hook -group kakrc global InsertChar '"' %{ try %{ autopairs-quote '"' } }
+hook -group kakrc global InsertChar "'" %{ try %{ autopairs-quote "'" } }
+hook -group kakrc global InsertChar `   %{ try %{ autopairs-quote ` } }
+hook -group kakrc global InsertDelete \( %{ try %{ autopairs-close ')' } }
+hook -group kakrc global InsertDelete \[ %{ try %{ autopairs-close ']' } }
+hook -group kakrc global InsertDelete \{ %[ try %[ autopairs-close '}' ] ]
+hook -group kakrc global InsertDelete '"' %{ try %{ autopairs-close '"' } }
+hook -group kakrc global InsertDelete "'" %{ try %{ autopairs-close "'" } }
+hook -group kakrc global InsertDelete `   %{ try %{ autopairs-close ` } }
+
 # --- bufferline (tmux) --------------------------------------------------------
 # Kakoune can't draw a bufferline itself, so each client publishes its buffer
 # list to its tmux pane as @kak_bufferline, which kakmux.conf draws as the
