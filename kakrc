@@ -1,13 +1,28 @@
 # Port of dotfiles/config/helix/{config,languages}.toml. Lines that don't carry over
 # are kept as comments saying why.
 
+# Sourcing this again in a running session (:config-reload, Helix's, at the
+# end) redoes it all with no errors and nothing twice: commands are
+# redefined (-override), highlighters replaced (-override, so they keep
+# their place), user modes made once, and every hook is in a kakrc group,
+# all of them removed here before they're added again. Options keep their
+# values (the state below: diagnostics, gutter flags, bufferline caches)
+# unless declared with one, which only settings are. The plugins load
+# once: kakrc_loaded, set at the end.
+declare-option -hidden bool kakrc_loaded
+remove-hooks global kakrc(-.*)?
+# the first time only: evaluate-commands "kakrc-first-%opt{kakrc_loaded}"
+define-command -override -hidden kakrc-first-false nop
+
 # --- tree-sitter, LSP --------------------------------------------------------
 # Helix's built-ins, here kak-tree-sitter (highlighting, text objects) and
 # kakoune-lsp; see [editor.lsp] below. Both set default faces as they load,
 # so they come before the colour scheme. Those defaults are kept in
-# plugin_faces for :colorscheme to reset to, for schemes that don't set them.
+# plugin_faces for :colorscheme to reset to, for schemes that don't set them
+# (and for :config-reload, which doesn't load the plugins again).
 declare-option -hidden str plugin_faces
 evaluate-commands %sh{
+	[ "$kak_opt_kakrc_loaded" = true ] && exit
 	command -v kak-tree-sitter >/dev/null || exit
 	# Grammars are installed one language at a time (`ktsctl sync rust`).
 	# kak-tree-sitter turns off Kakoune's highlighter for every language it
@@ -72,6 +87,7 @@ evaluate-commands %sh{
 	printf "set-option -add global plugin_faces '%s'\n" "$faces"
 }
 evaluate-commands %sh{
+	[ "$kak_opt_kakrc_loaded" = true ] && exit
 	command -v kak-lsp >/dev/null || exit
 	rc=$(kak-lsp) || exit
 	printf '%s\n' "$rc"
@@ -87,8 +103,9 @@ evaluate-commands %sh{
 
 # Faces this kakrc draws with, for colour schemes that don't set them: the
 # hover/completion docs kak-lsp writes in markup, the modeline's diagnostic
-# counts, the git gutter. Kept with the plugins' defaults above.
-set-option -add global plugin_faces %{
+# counts, the git gutter. Kept beside the plugins' defaults above.
+declare-option -hidden str kakrc_faces
+set-option global kakrc_faces %{
 set-face global InfoDefault Information
 set-face global InfoHeader +b@Information
 set-face global InfoMono Information
@@ -109,6 +126,7 @@ set-face global GitGutterModify yellow
 set-face global GitGutterDelete red
 }
 evaluate-commands %opt{plugin_faces}
+evaluate-commands %opt{kakrc_faces}
 
 # --- theme -------------------------------------------------------------------
 # Kakoune ships no onedark; colors/onedark.kak is a port of Helix's, tree-sitter
@@ -138,9 +156,9 @@ colorscheme onedark
 declare-option -hidden str-list insert_completers
 declare-option -hidden bool insert_completers_own
 declare-option -hidden str-list insert_completers_diff
-define-command -hidden -params 0 insert-completers-none nop
-define-command -hidden insert-completers-own-true nop
-hook global ModeChange push:.*:insert %{
+define-command -override -hidden -params 0 insert-completers-none nop
+define-command -override -hidden insert-completers-own-true nop
+hook -group kakrc global ModeChange push:.*:insert %{
 	set-option window insert_completers %opt{completers}
 	unset-option window completers
 	set-option window insert_completers_own true
@@ -157,7 +175,7 @@ hook global ModeChange push:.*:insert %{
 	hook -once -group insert-completers window InsertChar .* insert-completers-restore
 	hook -once -group insert-completers window ModeChange pop:insert:.* insert-completers-restore
 }
-define-command -hidden insert-completers-restore %{
+define-command -override -hidden insert-completers-restore %{
 	remove-hooks window insert-completers
 	unset-option window completers
 	try %{
@@ -174,7 +192,7 @@ define-command -hidden insert-completers-restore %{
 # leaving the editor (see picker_clients below); under kakbr, moving to broot
 # is. A write that fails (read-only file, gone directory) says so: why in
 # *debug*, that it did in the focused client.
-define-command -hidden auto-save-all %{
+define-command -override -hidden auto-save-all %{
 	try %{ write-all } catch %{
 		echo -debug "auto-save: %val{error}"
 		try %{
@@ -184,7 +202,7 @@ define-command -hidden auto-save-all %{
 		}
 	}
 }
-hook global FocusOut .* %{
+hook -group kakrc global FocusOut .* %{
 	evaluate-commands %sh{
 		case ${kak_client_env_TMUX%%,*} in */kakmux-*) exit ;; esac
 		eval set -- "$kak_quoted_opt_picker_clients"
@@ -197,10 +215,10 @@ hook global FocusOut .* %{
 # instead, which gives much the same picture where indentation is tabs (C,
 # C++, sh, markdown: see languages.toml below); indentation in spaces gets
 # no guides.
-add-highlighter global/ show-whitespaces -tab '│' -tabpad ' ' -spc ' ' -lf ' ' -nbsp '⍽'
+add-highlighter -override global/ show-whitespaces -tab '│' -tabpad ' ' -spc ' ' -lf ' ' -nbsp '⍽'
 
 # soft-wrap.enable = true
-add-highlighter global/ wrap -word -indent
+add-highlighter -override global/ wrap -word -indent
 
 # Like Helix, opening a file over the blank startup *scratch* replaces it
 # rather than leaving it behind (:e, pickers, anything that switches buffer).
@@ -208,10 +226,10 @@ add-highlighter global/ wrap -word -indent
 # and so is one another client (another split) still shows: it goes once
 # that one moves off it too.
 # (Kakoune's regex lookarounds can't hold $, hence no anchor.)
-define-command -hidden fail-if-on-scratch %{
+define-command -override -hidden fail-if-on-scratch %{
 	evaluate-commands %sh{ [ "$kak_bufname" = '*scratch*' ] && echo fail }
 }
-hook global WinDisplay (?!\*scratch\*).* %{
+hook -group kakrc global WinDisplay (?!\*scratch\*).* %{
 	try %{
 		evaluate-commands -buffer *scratch* %{ execute-keys '%<a-k>\A\s*\z<ret>' }
 		evaluate-commands %sh{
@@ -229,11 +247,11 @@ hook global WinDisplay (?!\*scratch\*).* %{
 alias global qa       kill
 alias global quit-all kill
 alias global qa!      kill!
-define-command write-quit-all -docstring 'write all buffers, then quit all clients' %{
+define-command -override write-quit-all -docstring 'write all buffers, then quit all clients' %{
 	write-all
 	kill
 }
-define-command -hidden write-quit-all-force %{
+define-command -override -hidden write-quit-all-force %{
 	write-all
 	kill!
 }
@@ -257,11 +275,11 @@ declare-option -hidden str-list unfocused_clients
 # one argument) and its window isn't dimmed, or the other way round.
 declare-option -hidden bool statusline_dimmed false
 declare-option -hidden str-list statusline_cmp
-define-command -hidden -params 1 statusline-one nop
-define-command -hidden -params 0 statusline-none nop
-define-command -hidden statusline-dimmed-false nop
-define-command -hidden statusline-dimmed-true-unfocused nop
-define-command -hidden statusline-apply-focus %{
+define-command -override -hidden -params 1 statusline-one nop
+define-command -override -hidden -params 0 statusline-none nop
+define-command -override -hidden statusline-dimmed-false nop
+define-command -override -hidden statusline-dimmed-true-unfocused nop
+define-command -override -hidden statusline-apply-focus %{
 	try %{
 		set-option window statusline_cmp %val{client}
 		set-option -remove window statusline_cmp %opt{unfocused_clients}
@@ -294,26 +312,26 @@ define-command -hidden statusline-apply-focus %{
 		else echo 'set-option window statusline_dimmed false'; fi
 	} }
 }
-hook global FocusOut .* %{
+hook -group kakrc global FocusOut .* %{
 	set-option -remove global unfocused_clients %val{client}
 	set-option -add global unfocused_clients %val{client}
 	statusline-apply-focus
 }
-hook global FocusIn .* %{
+hook -group kakrc global FocusIn .* %{
 	set-option -remove global unfocused_clients %val{client}
 	statusline-apply-focus
 }
-hook global WinDisplay .* statusline-apply-focus
-hook global ClientClose .* %{ set-option -remove global unfocused_clients %val{hook_param} }
+hook -group kakrc global WinDisplay .* statusline-apply-focus
+hook -group kakrc global ClientClose .* %{ set-option -remove global unfocused_clients %val{hook_param} }
 
 # Under kakmux every split is a client of the same session, so the default
 # status line's " - client@[session]" tail is just noise there: strip it from
 # the global modelinefmt, once, when the first kakmux client connects (a
 # session in kakmux has only those). A no-op once the format is customised.
-hook -group modeline-kakmux global ClientCreate .* %{
+hook -group kakrc-modeline-kakmux global ClientCreate .* %{
 	evaluate-commands %sh{
 		case ${kak_client_env_TMUX%%,*} in */kakmux-*) ;; *) exit ;; esac
-		echo 'remove-hooks global modeline-kakmux'
+		echo 'remove-hooks global kakrc-modeline-kakmux'
 		fmt=$(printf %s "$kak_opt_modelinefmt" | sed 's/ - %val{client}@\[%val{session}\]$//')
 		[ "$fmt" = "$kak_opt_modelinefmt" ] && exit
 		printf "set-option global modelinefmt '%s'\n" "$(printf %s "$fmt" | sed "s/'/''/g")"
@@ -324,21 +342,24 @@ hook -group modeline-kakmux global ClientCreate .* %{
 # go right to left in the order they're added: the git gutter (see below)
 # right of the line numbers, diagnostics (kak-lsp, later) left of them.
 declare-option -hidden line-specs git_gutter_flags
-add-highlighter global/git-gutter flag-lines Default git_gutter_flags
-add-highlighter global/ number-lines -hlcursor
-add-highlighter global/ show-matching
+add-highlighter -override global/git-gutter flag-lines Default git_gutter_flags
+add-highlighter -override global/ number-lines -hlcursor
+add-highlighter -override global/ show-matching
 
 # --- [editor.lsp] / diagnostics -----------------------------------------------
 # kakoune-lsp (loaded at the top), for every filetype it has a server for:
 # its lsp_servers hooks (in kak-lsp's servers.kak) pick the server, which must
 # be installed (C/C++: clangd; sh: bash-language-server; markdown: marksman).
 try %{
-	lsp-enable
+	# (enabled already when this runs again: then only make sure kak-lsp is
+	# there; its options are)
+	try %{ lsp-enable } catch %{ nop %opt{lsp_snippet_support} }
 	# lsp.snippets = false
 	set-option global lsp_snippet_support false
 	# Helix defaults: signature help while typing a call's arguments, and
 	# no code-action indicator (kak-lsp's 💡 in the modeline, which asks the
 	# server for actions whenever keys stop)
+	lsp-auto-signature-help-disable
 	lsp-auto-signature-help-enable
 	set-option global lsp_auto_show_code_actions false
 	# end-of-line-diagnostics: every severity, not just warnings and up
@@ -349,9 +370,13 @@ try %{
 	set-option global lsp_inlay_diagnostic_gap ' '
 	# lsp.display-progress-messages: progress (and pending server messages)
 	# at the start of the modeline. Not the rest of kak-lsp's modeline: no
-	# breadcrumbs (Helix has none, and they're a request whenever keys stop)
+	# breadcrumbs (Helix has none, and they're a request whenever keys stop).
+	# Added to the front once, not again on each config-reload.
 	remove-hooks global lsp-breadcrumbs
-	set-option global modelinefmt "%%opt{lsp_modeline_progress}%%opt{lsp_modeline_message_requests}{StatusLineWarning}%%opt{lsp_diag_warnings}{StatusLineError}%%opt{lsp_diag_errors}{StatusLine} %opt{modelinefmt}"
+	try %{
+		evaluate-commands "kakrc-first-%opt{kakrc_loaded}"
+		set-option global modelinefmt "%%opt{lsp_modeline_progress}%%opt{lsp_modeline_message_requests}{StatusLineWarning}%%opt{lsp_diag_warnings}{StatusLineError}%%opt{lsp_diag_errors}{StatusLine} %opt{modelinefmt}"
+	}
 	# Helix's gutter mark, coloured by severity
 	set-option global lsp_diagnostic_line_error_sign   '●'
 	set-option global lsp_diagnostic_line_warning_sign '●'
@@ -399,8 +424,8 @@ declare-option -hidden str lsp_edit_armed
 declare-option -hidden str lsp_edit_what
 declare-option -hidden str lsp_edit_client
 declare-option -hidden str lsp_edit_from
-declare-option -hidden int lsp_edit_seq 0
-declare-option -hidden int lsp_edit_count 0
+declare-option -hidden int lsp_edit_seq
+declare-option -hidden int lsp_edit_count
 # buffiles: opened for this edit, and edited by it
 declare-option -hidden str-list lsp_edit_opened
 declare-option -hidden str-list lsp_edit_touched
@@ -408,7 +433,7 @@ declare-option -hidden str-list lsp_edit_touched
 # lsp-edit-arm WHAT: the next edit (until it's in, or 20s without one) is
 # held. The edit's buffers make the client run lsp-edit-done once it's all
 # in; the timer, in case it never comes (no edit, an error).
-define-command -hidden -params 1 lsp-edit-arm %{
+define-command -override -hidden -params 1 lsp-edit-arm %{
 	try %{ lsp-edit-finish }
 	set-option global lsp_edit_armed yes
 	set-option global lsp_edit_what %arg{1}
@@ -424,7 +449,7 @@ define-command -hidden -params 1 lsp-edit-arm %{
 }
 # lsp-edit-open FILE: a buffer for FILE, opened out of sight (kak-lsp's
 # BufCreate hook hands it to the server) unless there's one
-define-command -hidden -params 1 lsp-edit-open %{
+define-command -override -hidden -params 1 lsp-edit-open %{
 	try %{ evaluate-commands -buffer %arg{1} nop } catch %{
 		evaluate-commands -draft %{ edit -existing -- %arg{1} }
 		set-option -add global lsp_edit_opened %arg{1}
@@ -441,14 +466,14 @@ define-command -override -hidden lsp-did-change -docstring 'Notify language serv
 		lsp-send-buffer textDocument/didChange
 	}
 }
-define-command -hidden lsp-edit-touched- nop
+define-command -override -hidden lsp-edit-touched- nop
 # an edit has gone into this buffer: hold its write, count it (Kakoune's
 # list of changes not yet in the undo history: a replacement is a deletion
 # and its text typed after it, an insertion text typed from a place before
 # the last one: kak-lsp goes from the end of the buffer up), and the first
 # one has the client finish once the rest is in (a command sent now runs
 # after the one kak-lsp sent)
-define-command -hidden lsp-edit-touched-yes %{
+define-command -override -hidden lsp-edit-touched-yes %{
 	alias buffer write lsp-edit-hold
 	evaluate-commands %sh{
 		n=0 pl=-1 pc=-1 prev=
@@ -477,7 +502,7 @@ define-command -hidden lsp-edit-touched-yes %{
 # kak-lsp's write after its edit; a write with arguments goes through,
 # the hold kept (kak-lsp's own write -force to its fifo, with the buffer
 # for the server)
-define-command -hidden -params .. lsp-edit-hold %{
+define-command -override -hidden -params .. lsp-edit-hold %{
 	unalias buffer write lsp-edit-hold
 	evaluate-commands %sh{
 		[ $# -gt 0 ] || exit
@@ -487,12 +512,12 @@ define-command -hidden -params .. lsp-edit-hold %{
 }
 
 # lsp-edit-done SEQ: from the edit, or the timer; only for the latest arm
-define-command -hidden -params 1 lsp-edit-done %{
+define-command -override -hidden -params 1 lsp-edit-done %{
 	evaluate-commands %sh{
 		[ "$kak_opt_lsp_edit_armed" = yes ] && [ "$1" = "$kak_opt_lsp_edit_seq" ] && echo lsp-edit-finish
 	}
 }
-define-command -hidden lsp-edit-finish %{
+define-command -override -hidden lsp-edit-finish %{
 	set-option global lsp_edit_armed ''
 	evaluate-commands %sh{
 		nl='
@@ -534,18 +559,18 @@ define-command -hidden lsp-edit-finish %{
 # edited buffers are closed and reopened in the server (not in Kakoune).
 # No shell for other writes.
 declare-option -hidden str lsp_edit_unsaved
-declare-option -hidden int lsp_edit_unsaved_n 0
+declare-option -hidden int lsp_edit_unsaved_n
 declare-option -hidden str-list lsp_edit_reopen
-hook -group lsp-edit global BufWritePost .* %{
+hook -group kakrc global BufWritePost .* %{
 	evaluate-commands "lsp-edit-written-%opt{lsp_edit_unsaved}"
 }
-define-command -hidden lsp-edit-written- nop
-define-command -hidden lsp-edit-written-yes %{
+define-command -override -hidden lsp-edit-written- nop
+define-command -override -hidden lsp-edit-written-yes %{
 	unset-option buffer lsp_edit_unsaved
 	set-option -remove global lsp_edit_unsaved_n 1
 	try %{ evaluate-commands "lsp-edit-reopen-%opt{lsp_edit_unsaved_n}" }
 }
-define-command -hidden lsp-edit-reopen-0 %{
+define-command -override -hidden lsp-edit-reopen-0 %{
 	evaluate-commands %sh{
 		eval set -- "$kak_quoted_opt_lsp_edit_reopen"
 		for f; do
@@ -567,7 +592,7 @@ define-command -override lsp-rename -params 1 -docstring 'lsp-rename <new-name>:
 	}
 	lsp-send textDocument/rename %val{cursor_line} %val{cursor_column} %arg{1}
 }
-define-command -hidden -params 1 lsp-edit-open-word %{
+define-command -override -hidden -params 1 lsp-edit-open-word %{
 	evaluate-commands %sh{
 		case $kak_buffile in /*) ;; *) exit ;; esac
 		dir=${kak_buffile%/*}
@@ -637,8 +662,8 @@ declare-option -hidden int line_diags_seen 0
 declare-option -hidden str-list line_diags_pending
 declare-option -hidden str-list line_diags_dcols
 declare-option -hidden int line_diags_eolcol
-add-highlighter global/line-diags replace-ranges line_diags_view
-add-highlighter global/line-diags-eol flag-lines -after Default line_diags_eol
+add-highlighter -override global/line-diags replace-ranges line_diags_view
+add-highlighter -override global/line-diags-eol flag-lines -after Default line_diags_eol
 
 # Helix's status line diagnostics: a coloured ● and the count, warnings
 # then errors, each only when there are some. Set as kak-lsp publishes;
@@ -649,7 +674,7 @@ declare-option -hidden str lsp_diag_errors
 # kak-lsp publishes into the buffer: the counts for the modeline, and the
 # list is due. Each client showing it asks for it now; one that shows it
 # later does then (WinDisplay, below).
-hook global BufSetOption lsp_inlay_diagnostics=.* %{
+hook -group kakrc global BufSetOption lsp_inlay_diagnostics=.* %{
 	set-option buffer line_diags_state stale
 	evaluate-commands %sh{
 		w=$kak_opt_lsp_diagnostic_warning_count e=$kak_opt_lsp_diagnostic_error_count
@@ -674,8 +699,8 @@ hook global BufSetOption lsp_inlay_diagnostics=.* %{
 }
 # in a client: ask for the list if its buffer's is stale (whichever buffer
 # that is: only one just published, or one never asked for, is). No shell.
-define-command -hidden line-diags-stale-stale nop
-define-command -hidden line-diags-request %{
+define-command -override -hidden line-diags-stale-stale nop
+define-command -override -hidden line-diags-request %{
 	try %{
 		evaluate-commands "line-diags-stale-%opt{line_diags_state}"
 		set-option -add global line_diags_pending "%val{client}=%val{bufname}"
@@ -685,9 +710,9 @@ define-command -hidden line-diags-request %{
 		}
 	}
 }
-hook global WinDisplay .* line-diags-request
+hook -group kakrc global WinDisplay .* line-diags-request
 # a client gone, its lists will never come (nor the pickers', below)
-hook global ClientClose .* %{
+hook -group kakrc global ClientClose .* %{
 	evaluate-commands %sh{
 		eval set -- "$kak_quoted_opt_line_diags_pending" "$kak_quoted_opt_picker_only"
 		for e; do
@@ -748,7 +773,7 @@ define-command -override -hidden lsp-show-goto-buffer -params 4..5 %{
 # kak-lsp's lsp-show-document-symbol: its additions to the goto buffer
 # (`path` for gf on the file name, and the file <ret> jumps into) only when
 # that's what was shown, not the picker (they'd land on the file's buffer)
-define-command -hidden line-diags-shown-lsp-document-symbol nop
+define-command -override -hidden line-diags-shown-lsp-document-symbol nop
 define-command -override -hidden lsp-show-document-symbol -params 4 %{
 	lsp-show-goto-buffer *goto* lsp-document-symbol %arg{1} %arg{3} %arg{4}
 	evaluate-commands -try-client %opt[toolsclient] %{
@@ -760,7 +785,7 @@ define-command -override -hidden lsp-show-document-symbol -params 4 %{
 	}
 }
 # kak-lsp's lsp-show-goto-buffer (21.0.2), as it was
-define-command -hidden -params 4..5 line-diags-goto-buffer %{
+define-command -override -hidden -params 4..5 line-diags-goto-buffer %{
 	evaluate-commands -save-regs '"' -try-client %opt[toolsclient] %{
 		edit! -scratch %arg{1}
 		set-option buffer filetype %arg{2}
@@ -779,7 +804,7 @@ define-command -hidden -params 4..5 line-diags-goto-buffer %{
 
 # line-diags-capture ROOT LIST: keep this file's lines of the list, which
 # read `path:line:column: [severity][...] message` (path from ROOT on)
-define-command -hidden -params 2 line-diags-capture %{
+define-command -override -hidden -params 2 line-diags-capture %{
 	set-option buffer line_diags_state ''
 	evaluate-commands %sh{
 		double() {
@@ -825,7 +850,7 @@ define-command -hidden -params 2 line-diags-capture %{
 # Draw for the cursor's line, in two steps: this one picks its diagnostics
 # (rightmost first) and has Kakoune measure where on screen each one's column
 # is (tabs, wide characters); line-diags-draw draws.
-define-command -hidden line-diags-render %{
+define-command -override -hidden line-diags-render %{
 	set-option window line_diags_seen %val{cursor_line}
 	set-option window line_diags_dcols
 	evaluate-commands -draft %sh{
@@ -875,7 +900,7 @@ define-command -hidden line-diags-render %{
 
 # line-diags-draw COLUMN|SEVERITY|MESSAGE...: rightmost first, their screen
 # columns in line_diags_dcols; the main selection is the cursor's whole line
-define-command -hidden -params .. line-diags-draw %{
+define-command -override -hidden -params .. line-diags-draw %{
 	evaluate-commands %sh{
 		double() {
 			r= rest=$2
@@ -1011,9 +1036,9 @@ $lead{Default}  {$f}$r"
 # Redraw when the cursor changes line. Done without a shell otherwise: a
 # no-op command per unchanged line (line_diags_seen - cursor_line = 0), and
 # per buffer with no diagnostics and nothing drawn.
-define-command -hidden line-diags-same-0 nop
-define-command -hidden line-diags-skip-0-0 nop
-define-command -hidden line-diags-idle %{
+define-command -override -hidden line-diags-same-0 nop
+define-command -override -hidden line-diags-skip-0-0 nop
+define-command -override -hidden line-diags-idle %{
 	try %{
 		evaluate-commands "line-diags-skip-%opt{line_diags_n}-%opt{line_diags_drawn}"
 	} catch %{
@@ -1026,9 +1051,9 @@ define-command -hidden line-diags-idle %{
 		}
 	}
 }
-hook global NormalIdle .* line-diags-idle
-hook global InsertIdle .* line-diags-idle
-hook global WinDisplay .* %{ set-option window line_diags_seen 0 }
+hook -group kakrc global NormalIdle .* line-diags-idle
+hook -group kakrc global InsertIdle .* line-diags-idle
+hook -group kakrc global WinDisplay .* %{ set-option window line_diags_seen 0 }
 
 # kak-tree-sitter's text objects: <a-i>f, ]f etc. (f function, t type,
 # a argument, T test), and tree navigation (Helix's A-o/A-i...) in its mode
@@ -1043,7 +1068,7 @@ map global user t ':enter-user-mode tree-sitter<ret>' -docstring 'tree-sitter mo
 # for just that file, until its diagnostics picker opens (wherever the
 # client is by then)
 declare-option -hidden str-list picker_only
-define-command -hidden -params 4 picker-locations %{
+define-command -override -hidden -params 4 picker-locations %{
 	evaluate-commands %sh{
 		dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-picker.XXXXXX") || exit
 		echo "echo -to-file '$dir/list' %arg{4}"
@@ -1062,7 +1087,7 @@ define-command -hidden -params 4 picker-locations %{
 	}
 }
 
-define-command diagnostics-picker -params ..1 -docstring 'diagnostics-picker [-workspace]: this file''s diagnostics (or every file''s) in a picker' %{
+define-command -override diagnostics-picker -params ..1 -docstring 'diagnostics-picker [-workspace]: this file''s diagnostics (or every file''s) in a picker' %{
 	# replaces what an earlier one left (one kak-lsp never answered); no
 	# picker outside tmux: kak-lsp's buffer, with every file's
 	evaluate-commands %sh{
@@ -1080,32 +1105,32 @@ define-command diagnostics-picker -params ..1 -docstring 'diagnostics-picker [-w
 		fail %val{error}
 	}
 }
-define-command symbol-picker -docstring "this file's symbols in a picker" %{
+define-command -override symbol-picker -docstring "this file's symbols in a picker" %{
 	lsp-document-symbol
 }
 
 # The workspace symbol picker asks the server as you type (kak-picker
 # --wsym): each answer goes to the file named here instead.
 declare-option -hidden str picker_wsym_out
-define-command -hidden -params 2 picker-wsym-deliver %{
+define-command -override -hidden -params 2 picker-wsym-deliver %{
 	echo -to-file "%opt{picker_wsym_out}.root" %arg{1}
 	echo -to-file "%opt{picker_wsym_out}" %arg{2}
 	set-option window picker_wsym_out ''
 }
-define-command workspace-symbol-picker -docstring 'search the workspace''s symbols (picker)' %{
+define-command -override workspace-symbol-picker -docstring 'search the workspace''s symbols (picker)' %{
 	evaluate-commands %sh{
 		dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-picker.XXXXXX") || exit
 		echo "picker-open workspace-symbols '$dir'"
 	}
 }
 
-define-command global-search -docstring 'search the files under the cwd as you type (ripgrep, picker)' %{
+define-command -override global-search -docstring 'search the files under the cwd as you type (ripgrep, picker)' %{
 	evaluate-commands %sh{
 		dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-picker.XXXXXX") || exit
 		echo "picker-open grep '$dir'"
 	}
 }
-define-command changed-file-picker -docstring 'files changed since HEAD (git, picker)' %{
+define-command -override changed-file-picker -docstring 'files changed since HEAD (git, picker)' %{
 	evaluate-commands %sh{
 		git rev-parse --show-toplevel >/dev/null 2>&1 ||
 			{ echo "fail 'changed files: not in a git repository'"; exit; }
@@ -1138,11 +1163,11 @@ declare-option -hidden str git_gutter_path
 declare-option -hidden int git_gutter_seen -1
 
 # (checks without a shell: these exist for the states they accept)
-define-command -hidden git-gutter-known-yes nop
-define-command -hidden git-gutter-known-no nop
-define-command -hidden git-gutter-on-yes nop
+define-command -override -hidden git-gutter-known-yes nop
+define-command -override -hidden git-gutter-known-no nop
+define-command -override -hidden git-gutter-on-yes nop
 
-define-command -hidden git-gutter-locate %{
+define-command -override -hidden git-gutter-locate %{
 	evaluate-commands %sh{
 		root=
 		case $kak_buffile in
@@ -1160,7 +1185,7 @@ define-command -hidden git-gutter-locate %{
 	}
 }
 
-define-command -hidden git-gutter-update %{
+define-command -override -hidden git-gutter-update %{
 	try %{ evaluate-commands "git-gutter-known-%opt{git_gutter_state}" } catch %{ git-gutter-locate }
 	try %{
 		evaluate-commands "git-gutter-on-%opt{git_gutter_state}"
@@ -1170,11 +1195,11 @@ define-command -hidden git-gutter-update %{
 
 # the session's temp dir (made on first use, removed when it ends)
 declare-option -hidden str git_gutter_dir
-hook global KakEnd .* %{
+hook -group kakrc global KakEnd .* %{
 	nop %sh{ [ -n "$kak_opt_git_gutter_dir" ] && rm -rf -- "$kak_opt_git_gutter_dir" }
 }
 
-define-command -hidden git-gutter-run %{
+define-command -override -hidden git-gutter-run %{
 	set-option buffer git_gutter_seen %val{timestamp}
 	evaluate-commands %sh{
 		dir=$kak_opt_git_gutter_dir
@@ -1190,7 +1215,7 @@ define-command -hidden git-gutter-run %{
 	}
 }
 # git-gutter-diff FILES TIMESTAMP LINES: FILES.buf against HEAD
-define-command -hidden -params 3 git-gutter-diff %{
+define-command -override -hidden -params 3 git-gutter-diff %{
 	nop %sh{
 		(
 			f=$1 ts=$2 lines=$3
@@ -1222,7 +1247,7 @@ define-command -hidden -params 3 git-gutter-diff %{
 # git-gutter-set TIMESTAMP FLAGS...: from the latest run only (a slower,
 # older one finishing later is dropped); git_gutter_seen less TIMESTAMP is
 # 0 for that one
-define-command -hidden -params 1.. git-gutter-set %{
+define-command -override -hidden -params 1.. git-gutter-set %{
 	set-option -remove buffer git_gutter_seen %arg{1}
 	try %{
 		evaluate-commands "git-gutter-same-%opt{git_gutter_seen}"
@@ -1233,8 +1258,8 @@ define-command -hidden -params 1.. git-gutter-set %{
 
 # per buffer when keys stop, if it changed since (no shell otherwise: the
 # timestamp check is a no-op command when they're equal)
-define-command -hidden git-gutter-same-0 nop
-define-command -hidden git-gutter-idle %{
+define-command -override -hidden git-gutter-same-0 nop
+define-command -override -hidden git-gutter-idle %{
 	try %{
 		evaluate-commands "git-gutter-on-%opt{git_gutter_state}"
 		set-option -remove buffer git_gutter_seen %val{timestamp}
@@ -1246,15 +1271,15 @@ define-command -hidden git-gutter-idle %{
 		}
 	}
 }
-hook global NormalIdle .* git-gutter-idle
-hook global InsertIdle .* git-gutter-idle
-hook global WinDisplay .* git-gutter-update
+hook -group kakrc global NormalIdle .* git-gutter-idle
+hook -group kakrc global InsertIdle .* git-gutter-idle
+hook -group kakrc global WinDisplay .* git-gutter-update
 # saved (it may be new to git no more), or back from elsewhere (a commit)
-hook global BufWritePost .* %{ set-option buffer git_gutter_state ''; git-gutter-update }
-hook global FocusIn .* %{ set-option buffer git_gutter_state ''; git-gutter-update }
+hook -group kakrc global BufWritePost .* %{ set-option buffer git_gutter_state ''; git-gutter-update }
+hook -group kakrc global FocusIn .* %{ set-option buffer git_gutter_state ''; git-gutter-update }
 
 # ]g [g: the next / previous change, from object mode (like ]d [d)
-define-command -hidden git-hunk-object %{
+define-command -override -hidden git-hunk-object %{
 	evaluate-commands %sh{
 		case $kak_object_flags in *to_begin*) dir=prev ;; *) dir=next ;; esac
 		eval set -- "$kak_quoted_opt_git_gutter_flags"
@@ -1285,7 +1310,7 @@ map global object g '<a-;>git-hunk-object<ret>' -docstring 'git change'
 # surrounds: ms( wraps the selections in ( ), mr([ turns the ( ) around them
 # into [ ], md( deletes them. A bracket and its closer are the same pair;
 # any other character pairs with itself.
-declare-user-mode match
+try %{ declare-user-mode match }
 map global normal m ':enter-user-mode match<ret>' -docstring 'match mode'
 map global match m m                       -docstring 'goto matching bracket'
 map global match i <a-i>                   -docstring 'select inside object'
@@ -1325,13 +1350,13 @@ declare-option -hidden str surround_sh %{
 	kq() { printf "'%s'" "$(printf %s "$1" | sed "s/'/''/g")"; }
 }
 
-define-command -hidden surround-add %{
+define-command -override -hidden surround-add %{
 	on-key -mode-name surround %{ evaluate-commands %sh{
 		eval "$kak_opt_surround_sh"; surround_char "$kak_key"
 		printf '%s\n' "surround-insert $(kq "$o") $(kq "$c")"
 	} }
 }
-define-command -hidden -params 2 surround-insert %{
+define-command -override -hidden -params 2 surround-insert %{
 	evaluate-commands -save-regs oc %{
 		set-register o %arg{1}
 		set-register c %arg{2}
@@ -1339,14 +1364,14 @@ define-command -hidden -params 2 surround-insert %{
 		execute-keys 'i<c-r>o<esc>a<c-r>c<esc><a-;>H<a-;>'
 	}
 }
-define-command -hidden surround-delete %{
+define-command -override -hidden surround-delete %{
 	on-key -mode-name surround %{ evaluate-commands %sh{
 		eval "$kak_opt_surround_sh"; surround_char "$kak_key"
 		# around it, its first and last characters, gone
 		printf '%s\n' "execute-keys $(kq "<a-a>$obj<a-S>d")"
 	} }
 }
-define-command -hidden surround-replace %{
+define-command -override -hidden surround-replace %{
 	on-key -mode-name surround %{ evaluate-commands %sh{
 		eval "$kak_opt_surround_sh"; surround_char "$kak_key"
 		printf '%s\n' "execute-keys $(kq "<a-a>$obj<a-S>")"
@@ -1354,7 +1379,7 @@ define-command -hidden surround-replace %{
 	} }
 }
 # the selections are the old pairs' characters, opener then closer
-define-command -hidden surround-replace-with %{
+define-command -override -hidden surround-replace-with %{
 	on-key -mode-name surround %{ evaluate-commands %sh{
 		eval "$kak_opt_surround_sh"; surround_char "$kak_key"
 		pairs= i=0
@@ -1365,7 +1390,7 @@ define-command -hidden surround-replace-with %{
 	} }
 }
 # surround-put CHARACTER...: one per selection, in their place
-define-command -hidden -params .. surround-put %{
+define-command -override -hidden -params .. surround-put %{
 	evaluate-commands -save-regs o %{
 		set-register o %arg{@}
 		execute-keys '"oR'
@@ -1398,7 +1423,7 @@ evaluate-commands %sh{
 	echo "set-option global clipboard_paste '$paste'"
 }
 # clipboard-yank [-main]: the selections, one per line (or just the main one)
-define-command -hidden -params ..1 clipboard-yank %{
+define-command -override -hidden -params ..1 clipboard-yank %{
 	evaluate-commands %sh{
 		[ -n "$kak_opt_clipboard_copy" ] || { echo "fail 'clipboard: no clipboard tool'"; exit; }
 		if [ "$1" = -main ]; then
@@ -1419,7 +1444,7 @@ define-command -hidden -params ..1 clipboard-yank %{
 # newline aside), one line each, as clipboard-yank copied them; else all of
 # it for each. (The text is kept whole, final newlines and all: a copied
 # line stays one.)
-define-command -hidden -params 1 clipboard-paste %{
+define-command -override -hidden -params 1 clipboard-paste %{
 	evaluate-commands -save-regs c %{
 		evaluate-commands %sh{
 			double() {
@@ -1500,7 +1525,7 @@ declare-option -hidden str-list bufferline_key
 declare-option -hidden str bufferline_active
 declare-option -hidden str bufferline_inactive
 
-define-command -hidden bufferline-load-styles %{
+define-command -override -hidden bufferline-load-styles %{
 	faces-load
 	evaluate-commands %sh{
 		# All in the shell, no other processes. A dump line reads
@@ -1554,8 +1579,8 @@ define-command -hidden bufferline-load-styles %{
 # This runs whenever keys stop, so the check whether anything changed is
 # done without a shell: the key, less what was sent, is nothing (which
 # bufferline-none, taking no arguments, accepts) when it was sent already.
-define-command -hidden -params 0 bufferline-none nop
-define-command -hidden bufferline-refresh %{
+define-command -override -hidden -params 0 bufferline-none nop
+define-command -override -hidden bufferline-refresh %{
 	set-option global bufferline_bufs
 	evaluate-commands -buffer * %{
 		set-option -add global bufferline_bufs "%val{modified}:%val{bufname}"
@@ -1569,7 +1594,7 @@ define-command -hidden bufferline-refresh %{
 	}
 }
 # (bufferline_key holds this pane's key)
-define-command -hidden bufferline-send %{
+define-command -override -hidden bufferline-send %{
 	evaluate-commands %sh{
 		case ${kak_client_env_TMUX%%,*} in */kakmux-*) ;; *) exit 0 ;; esac
 		[ -n "$kak_client_env_TMUX_PANE" ] || exit 0
@@ -1624,15 +1649,15 @@ define-command -hidden bufferline-send %{
 # the check is without one (the client, less those, is nothing).
 declare-option -hidden str-list kakmux_clients
 declare-option -hidden str-list kakmux_cmp
-define-command -hidden -params 0 kakmux-none nop
-hook global ClientCreate .* %{
+define-command -override -hidden -params 0 kakmux-none nop
+hook -group kakrc global ClientCreate .* %{
 	evaluate-commands %sh{
 		case ${kak_client_env_TMUX%%,*} in */kakmux-*)
 			echo 'set-option -add global kakmux_clients %val{client}' ;;
 		esac
 	}
 }
-hook global ClientRenamed .* %{
+hook -group kakrc global ClientRenamed .* %{
 	evaluate-commands %sh{
 		printf "set-option -remove global kakmux_clients '%s'\n" "$(printf %s "${kak_hook_param%:*}" | sed "s/'/''/g")"
 		case ${kak_client_env_TMUX%%,*} in */kakmux-*)
@@ -1640,8 +1665,8 @@ hook global ClientRenamed .* %{
 		esac
 	}
 }
-hook global ClientClose .* %{ set-option -remove global kakmux_clients %val{hook_param} }
-define-command -hidden bufferline-idle %{
+hook -group kakrc global ClientClose .* %{ set-option -remove global kakmux_clients %val{hook_param} }
+define-command -override -hidden bufferline-idle %{
 	try %{
 		set-option window kakmux_cmp %val{client}
 		set-option -remove window kakmux_cmp %opt{kakmux_clients}
@@ -1649,9 +1674,9 @@ define-command -hidden bufferline-idle %{
 		bufferline-refresh
 	}
 }
-hook global NormalIdle .* bufferline-idle
-hook global InsertIdle .* bufferline-idle
-hook global FocusIn    .* bufferline-idle
+hook -group kakrc global NormalIdle .* bufferline-idle
+hook -group kakrc global InsertIdle .* bufferline-idle
+hook -group kakrc global FocusIn    .* bufferline-idle
 
 # :kakmux moves this client into a kakmux: it opens a client on the same session
 # in a new, detached kakmux (its own tmux server, as each kakmux has), which
@@ -1659,7 +1684,7 @@ hook global FocusIn    .* bufferline-idle
 # with the last client). kak (the .zshrc wrapper that set KAKMUX_HANDOFF) then
 # attaches it in this terminal, or inside another tmux, nested in this pane
 # (see ~/.local/bin/kakmux).
-define-command kakmux -docstring 'continue this session inside kakmux (tmux bufferline)' %{
+define-command -override kakmux -docstring 'continue this session inside kakmux (tmux bufferline)' %{
 	evaluate-commands %sh{
 		case ${kak_client_env_TMUX%%,*} in */kakmux-*)
 			echo "fail 'kakmux: already inside kakmux'"; exit ;;
@@ -1705,18 +1730,19 @@ declare-option str picker_bat_theme TwoDark
 # (usually empty) window scope, so it runs in *debug*'s buffer context.
 declare-option -hidden str faces_cache
 
-define-command -hidden faces-load %{
+define-command -override -hidden faces-load %{
 	evaluate-commands %sh{
 		[ -n "$kak_opt_faces_cache" ] ||
 			echo "evaluate-commands -buffer *debug* %{ debug faces; execute-keys 'ge<a-?>^Faces:<ret>'; set-option global faces_cache %val{selection} }"
 	}
 }
 
-define-command -hidden -params 1 picker-colorscheme %{
+define-command -override -hidden -params 1 picker-colorscheme %{
 	set-option global faces_cache ''
 	set-option global bufferline_active ''
 	# for schemes without them (default: the bufferline's fallbacks)
 	evaluate-commands %opt{plugin_faces}
+	evaluate-commands %opt{kakrc_faces}
 	set-face global StatusLineInactive '+d@StatusLine'
 	set-face global BufferLineActive default
 	set-face global BufferLineInactive default
@@ -1736,7 +1762,7 @@ complete-command picker-colorscheme shell-script-candidates %{
 alias global colorscheme picker-colorscheme
 
 declare-option -hidden str-list buffer_mru
-hook global WinDisplay .* %{
+hook -group kakrc global WinDisplay .* %{
 	set-option -remove global buffer_mru %val{bufname}
 	set-option -add global buffer_mru %val{bufname}
 }
@@ -1744,16 +1770,16 @@ hook global WinDisplay .* %{
 # where each buffer's cursor last was: evaluate-commands -buffer, which the
 # buffer picker reads buffers with, always starts at line 1
 declare-option -hidden int picker_line 1
-hook global NormalIdle .* %{ set-option buffer picker_line %val{cursor_line} }
+hook -group kakrc global NormalIdle .* %{ set-option buffer picker_line %val{cursor_line} }
 
 # clients with a picker popup open: the popup takes the focus, but that isn't
 # leaving the editor (no auto-save, no dimmed status line). Until FocusIn.
 declare-option -hidden str-list picker_clients
-hook global FocusIn     .* %{ set-option -remove global picker_clients %val{client} }
-hook global ClientClose .* %{ set-option -remove global picker_clients %val{hook_param} }
+hook -group kakrc global FocusIn     .* %{ set-option -remove global picker_clients %val{client} }
+hook -group kakrc global ClientClose .* %{ set-option -remove global picker_clients %val{hook_param} }
 
 # picker-open KIND DIR
-define-command -hidden -params 2 picker-open %{
+define-command -override -hidden -params 2 picker-open %{
 	evaluate-commands %sh{
 		[ -n "$kak_client_env_TMUX" ] && exit
 		rm -rf -- "${2:?}"
@@ -1777,7 +1803,7 @@ define-command -hidden -params 2 picker-open %{
 	}
 }
 
-define-command buffer-picker -docstring 'fuzzy-pick a buffer (tmux popup)' %{
+define-command -override buffer-picker -docstring 'fuzzy-pick a buffer (tmux popup)' %{
 	evaluate-commands %sh{
 		dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-picker.XXXXXX") || exit
 		# most recent first, then any buffer never displayed yet
@@ -1805,7 +1831,7 @@ define-command buffer-picker -docstring 'fuzzy-pick a buffer (tmux popup)' %{
 	}
 }
 
-define-command file-picker -docstring "fuzzy-pick a file under kak's cwd (tmux popup)" %{
+define-command -override file-picker -docstring "fuzzy-pick a file under kak's cwd (tmux popup)" %{
 	evaluate-commands %sh{
 		dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-picker.XXXXXX") || exit
 		echo "picker-open files '${dir:?}'"
@@ -1828,7 +1854,7 @@ map global user f ':file-picker<ret>'   -docstring 'file picker'
 # R% and the new one (100 - R)% of the pair. :weight reads/sets weights.
 
 # split-with -h|-v INIT [RATIO]: new client in a split, running kak commands INIT
-define-command -hidden -params 2..3 split-with %{
+define-command -override -hidden -params 2..3 split-with %{
 	evaluate-commands %sh{
 		if [ -z "$kak_client_env_TMUX" ]; then
 			echo "fail 'split: needs tmux (:kakmux)'"; exit
@@ -1842,11 +1868,11 @@ define-command -hidden -params 2..3 split-with %{
 		}
 	}
 }
-define-command -hidden splits-even %{
+define-command -override -hidden splits-even %{
 	nop %sh{ ~/.config/kak/bin/kakmux-even "${kak_client_env_TMUX%%,*}" "$kak_client_env_TMUX_PANE" all >/dev/null 2>&1 }
 }
 # split-impl -h|-v [RATIO] [FILE]
-define-command -hidden -params 1..3 split-impl %{
+define-command -override -hidden -params 1..3 split-impl %{
 	evaluate-commands %sh{
 		kq() { printf "'%s'" "$(printf %s "$1" | sed "s/'/''/g")"; }
 		dir=$1; shift
@@ -1864,14 +1890,14 @@ define-command -hidden -params 1..3 split-impl %{
 		printf '%s\n' "split-with $dir $(kq "$init") $ratio"
 	}
 }
-define-command vsplit -params ..2 -docstring 'vsplit [<ratio>] [<file>]: split side by side, this one <ratio>% (1-99) of the pair' %{ split-impl -h %arg{@} }
-define-command hsplit -params ..2 -docstring 'hsplit [<ratio>] [<file>]: split stacked, this one <ratio>% (1-99) of the pair' %{ split-impl -v %arg{@} }
+define-command -override vsplit -params ..2 -docstring 'vsplit [<ratio>] [<file>]: split side by side, this one <ratio>% (1-99) of the pair' %{ split-impl -h %arg{@} }
+define-command -override hsplit -params ..2 -docstring 'hsplit [<ratio>] [<file>]: split stacked, this one <ratio>% (1-99) of the pair' %{ split-impl -v %arg{@} }
 complete-command vsplit file
 complete-command hsplit file
 alias global vs vsplit
 alias global hs hsplit
 
-define-command weight -params ..2 -docstring 'weight [-width|-height] [<w>]: set this split''s share of the row/column it''s directly in, or with -width (-height), the share of the part holding it in the next row (column) out; without <w>, show those' %{
+define-command -override weight -params ..2 -docstring 'weight [-width|-height] [<w>]: set this split''s share of the row/column it''s directly in, or with -width (-height), the share of the part holding it in the next row (column) out; without <w>, show those' %{
 	evaluate-commands %sh{
 		if [ -z "$kak_client_env_TMUX" ]; then
 			echo "fail 'weight: needs tmux (:kakmux)'"; exit
@@ -1894,7 +1920,7 @@ define-command weight -params ..2 -docstring 'weight [-width|-height] [<w>]: set
 # close every other split: the window's other panes labelled with this
 # session (see pane-label below), not shells or other sessions' clients
 # sharing the window. With one pane left, the weights only name panes gone.
-define-command -hidden split-only %{
+define-command -override -hidden split-only %{
 	evaluate-commands %sh{
 		if [ -z "$kak_client_env_TMUX" ] || [ -z "$kak_client_env_TMUX_PANE" ]; then
 			echo "fail 'split: needs tmux (:kakmux)'"; exit
@@ -1913,7 +1939,7 @@ define-command -hidden split-only %{
 
 # tmux-here ARGS: a tmux command on this client's tmux server (never the
 # default one, for a client outside tmux)
-define-command -hidden -params 1.. tmux-here %{
+define-command -override -hidden -params 1.. tmux-here %{
 	evaluate-commands %sh{
 		if [ -z "$kak_client_env_TMUX" ] || [ -z "$kak_client_env_TMUX_PANE" ]; then
 			echo "fail 'split: needs tmux (:kakmux)'"; exit
@@ -1926,7 +1952,7 @@ define-command -hidden -params 1.. tmux-here %{
 # one, a tmux nested in another (kakmux, :kakmux) moves on there, by the same
 # rule: its session option @outer_pane holds the other's socket and the pane
 # it runs in, and that tmux's session may have one in turn.
-define-command -hidden -params 1 split-focus %{
+define-command -override -hidden -params 1 split-focus %{
 	nop %sh{
 		case $1 in -L) edge=left ;; -R) edge=right ;; -U) edge=top ;; -D) edge=bottom ;; esac
 		socket=${kak_client_env_TMUX%%,*} pane=$kak_client_env_TMUX_PANE
@@ -1943,7 +1969,7 @@ define-command -hidden -params 1 split-focus %{
 
 # Each client labels its tmux pane with @kak_session and @kak_client, so tools
 # outside kak can reach the client in a pane (broot-open opens files there).
-define-command -hidden pane-label %{
+define-command -override -hidden pane-label %{
 	nop %sh{
 		[ -n "$kak_client_env_TMUX_PANE" ] || exit
 		TMUX="$kak_client_env_TMUX" tmux \
@@ -1951,16 +1977,16 @@ define-command -hidden pane-label %{
 			set-option -p -t "$kak_client_env_TMUX_PANE" @kak_client "$kak_client" >/dev/null 2>&1
 	}
 }
-hook global ClientCreate  .* pane-label
-hook global ClientRenamed .* pane-label
+hook -group kakrc global ClientCreate  .* pane-label
+hook -group kakrc global ClientRenamed .* pane-label
 
 # run-in-focused-client CMD: run kak commands CMD in the client focused last
 # (else any), for tools outside kak that only know its session: broot-open
 # opens files that way
 declare-option -hidden str focused_client
-hook global ClientCreate .* %{ set-option global focused_client %val{client} }
-hook global FocusIn      .* %{ set-option global focused_client %val{client} }
-define-command -hidden -params 1 run-in-focused-client %{
+hook -group kakrc global ClientCreate .* %{ set-option global focused_client %val{client} }
+hook -group kakrc global FocusIn      .* %{ set-option global focused_client %val{client} }
+define-command -override -hidden -params 1 run-in-focused-client %{
 	evaluate-commands %sh{
 		eval set -- "$kak_quoted_client_list"
 		target=$1
@@ -1970,7 +1996,7 @@ define-command -hidden -params 1 run-in-focused-client %{
 	}
 }
 
-declare-user-mode window
+try %{ declare-user-mode window }
 map global window v ':vsplit<ret>'                         -docstring 'split side by side'
 map global window s ':hsplit<ret>'                         -docstring 'split stacked'
 map global window h ':split-focus -L<ret>'                 -docstring 'focus left'
@@ -1999,11 +2025,11 @@ map global goto p '<esc>:buffer-previous<ret>' -docstring 'previous buffer'
 # not in the list: window hooks run after global ones, so an undo on any
 # change would also undo this hook's own work when going from one of these
 # to another (c to cpp). lang-indent-<filetype> exists for the ones listed.
-define-command -hidden lang-indent-c nop
-define-command -hidden lang-indent-cpp nop
-define-command -hidden lang-indent-sh nop
-define-command -hidden lang-indent-markdown nop
-hook global WinSetOption filetype=(c|cpp|sh|markdown) %{
+define-command -override -hidden lang-indent-c nop
+define-command -override -hidden lang-indent-cpp nop
+define-command -override -hidden lang-indent-sh nop
+define-command -override -hidden lang-indent-markdown nop
+hook -group kakrc global WinSetOption filetype=(c|cpp|sh|markdown) %{
 	set-option window tabstop 4
 	set-option window indentwidth 0
 	remove-hooks window lang-indent
@@ -2015,3 +2041,13 @@ hook global WinSetOption filetype=(c|cpp|sh|markdown) %{
 		}
 	}
 }
+
+# Helix's :config-reload: this file again, in the running session (see the
+# top). What it set per window or buffer as they were shown or typed in
+# (tab widths, say) stays until they next are.
+define-command -override config-reload -docstring 'config-reload: source the kakrc again' %{
+	source "%val{config}/kakrc"
+	echo -markup '{Information}config reloaded'
+}
+
+set-option global kakrc_loaded true
