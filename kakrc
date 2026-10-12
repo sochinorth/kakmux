@@ -31,87 +31,138 @@ define-command -override -hidden -params 2.. each-client %{
 # (and for :config-reload, which doesn't load the plugins again).
 declare-option -hidden str plugin_faces
 declare-option -hidden str plugin_rc
+# Both print their Kakoune scripts as they start. What's made of those here
+# (the scripts, plugin_rc, the faces) is kept in $XDG_CACHE_HOME/kak, a file
+# per plugin, made again once it's older than the plugin's binary, this
+# kakrc or (kak-tree-sitter) its config, or was made for another binary:
+# else startup sources it, rather than running them and going through their
+# output in the shell (some 40 ms). kak-tree-sitter is still told of the
+# session (its server started, for the first one): in the background, as it
+# answers by kak -p anyway.
 evaluate-commands %sh{
 	[ "$kak_opt_kakrc_loaded" = true ] && exit
-	command -v kak-tree-sitter >/dev/null || exit
-	# Grammars are installed one language at a time (`ktsctl sync rust`).
-	# kak-tree-sitter turns off Kakoune's highlighter for every language it
-	# knows, grammar or not, so its config (written here, whenever the set
-	# installed changes) leaves the others to Kakoune.
-	data=${XDG_DATA_HOME:-$HOME/.local/share}/kak-tree-sitter
-	conf=${XDG_CONFIG_HOME:-$HOME/.config}/kak-tree-sitter/config.toml
-	have=
-	for d in "$data"/queries/*/; do
-		[ -d "$d" ] || continue
-		d=${d%/}; have="$have ${d##*/}"
-	done
-	head=; [ -r "$conf" ] && IFS= read -r head < "$conf"
-	if [ "$head" != "# installed:$have" ]; then
-		mkdir -p "${conf%/*}" && {
-			echo "# installed:$have"
-			echo "# Written by kakrc from what's installed in $data: don't edit."
-			ktsctl default-config |
-				sed -n 's/^\[language\."\([^"]*\)".*/\1/p; s/^\[language\.\([^]."]*\).*/\1/p' |
-				sort -u |
+	cache=${XDG_CACHE_HOME:-$HOME/.cache}/kak
+	# source FILE, kak-quoted (all in the shell, no other processes)
+	src() {
+		r= rest=$1
+		while :; do
+			case $rest in
+			*"'"*) r="$r${rest%%"'"*}''" rest=${rest#*"'"} ;;
+			*) printf "source '%s'\n" "$r$rest"; return ;;
+			esac
+		done
+	}
+	# fresh FILE BIN [FILE...]: FILE is made for BIN, and newer than it
+	# and the others
+	fresh() {
+		f=$1 bin=$2; shift 2
+		[ -r "$f" ] || return 1
+		IFS= read -r first < "$f" && [ "$first" = "# $bin" ] || return 1
+		for dep in "$bin" "$@"; do [ "$f" -nt "$dep" ] || return 1; done
+	}
+	# keep FILE BIN: the script on stdin to FILE (headed with BIN), sourced;
+	# or, if it can't be written, as it is
+	keep() {
+		tmp=$1.$$
+		if mkdir -p "$cache" 2>/dev/null && { echo "# $2"; cat; } > "$tmp" && mv -f -- "$tmp" "$1"; then
+			src "$1"
+		else
+			rm -f -- "$tmp"; cat
+		fi
+	}
+	if kts=$(command -v kak-tree-sitter); then
+		# Grammars are installed one language at a time (`ktsctl sync
+		# rust`). kak-tree-sitter turns off Kakoune's highlighter for every
+		# language it knows, grammar or not, so its config (written here,
+		# whenever the set installed changes) leaves the others to Kakoune.
+		data=${XDG_DATA_HOME:-$HOME/.local/share}/kak-tree-sitter
+		conf=${XDG_CONFIG_HOME:-$HOME/.config}/kak-tree-sitter/config.toml
+		have=
+		for d in "$data"/queries/*/; do
+			[ -d "$d" ] || continue
+			d=${d%/}; have="$have ${d##*/}"
+		done
+		head=; [ -r "$conf" ] && IFS= read -r head < "$conf"
+		if [ "$head" != "# installed:$have" ]; then
+			mkdir -p "${conf%/*}" && {
+				echo "# installed:$have"
+				echo "# Written by kakrc from what's installed in $data: don't edit."
+				ktsctl default-config |
+					sed -n 's/^\[language\."\([^"]*\)".*/\1/p; s/^\[language\.\([^]."]*\).*/\1/p' |
+					sort -u |
+					while IFS= read -r l; do
+						case "$have " in *" $l "*) continue ;; esac
+						printf '\n[language."%s"]\nfiletype_hook = false\nremove_default_highlighter = false\n' "$l"
+					done
+			} > "$conf.tmp" && mv -f -- "$conf.tmp" "$conf"
+			# a server already running (one serves all sessions) rereads it
+			kak-tree-sitter -r "{ \"metadata\": { \"session\": \"$kak_session\" }, \"payload\": { \"type\": \"reload\" } }" >/dev/null 2>&1
+		fi
+		# its server (started by the first session), which this session joins
+		f=$cache/plugin-kak-tree-sitter.kak
+		if fresh "$f" "$kts" "$conf" "$kak_config/kakrc"; then
+			kak-tree-sitter -dks --init "$kak_session" >/dev/null 2>&1 </dev/null &
+			src "$f"
+		elif rc=$(kak-tree-sitter -dks --init "$kak_session"); then
+			{
+				printf '%s\n' "$rc"
+				# (kept for the command palette, which lists what it defines)
+				printf "set-option -add global plugin_rc '%s\n'\n" "$(printf %s "$rc" | sed "s/'/''/g")"
+				# ts_<scope> faces link to their parent scope's, some of which
+				# it leaves undefined (ts_markup for ts_markup_bold, ...):
+				# define those too
+				faces= names=' '
 				while IFS= read -r l; do
-					case "$have " in *" $l "*) continue ;; esac
-					printf '\n[language."%s"]\nfiletype_hook = false\nremove_default_highlighter = false\n' "$l"
+					case $l in 'set-face global ts_'*) ;; *) continue ;; esac
+					faces="$faces$l
+"
+					l=${l#set-face global }; names="$names${l%% *} "
+				done <<-EOF
+					$rc
+				EOF
+				missing=$faces
+				while [ -n "$missing" ]; do
+					next=
+					while IFS= read -r l; do
+						[ -n "$l" ] || continue
+						p=${l##* }
+						case $names in *" $p "*) continue ;; esac
+						case $p in ts_*) ;; *) continue ;; esac
+						q=${p#ts_}
+						case $q in *_*) q=ts_${q%_*} ;; *) q=default ;; esac
+						names="$names$p "
+						next="${next}set-face global $p $q
+"
+					done <<-EOF
+						$missing
+					EOF
+					faces=$faces$next missing=$next
 				done
-		} > "$conf.tmp" && mv -f -- "$conf.tmp" "$conf"
-		# a server already running (one serves all sessions) rereads it
-		kak-tree-sitter -r "{ \"metadata\": { \"session\": \"$kak_session\" }, \"payload\": { \"type\": \"reload\" } }" >/dev/null 2>&1
+				printf %s "$faces"
+				printf "set-option -add global plugin_faces '%s'\n" "$faces"
+			} | keep "$f" "$kts"
+		fi
 	fi
-	# its server (started by the first session), which this session joins
-	rc=$(kak-tree-sitter -dks --init "$kak_session") || exit
-	printf '%s\n' "$rc"
-	# (kept for the command palette, which lists what it defines)
-	printf "set-option -add global plugin_rc '%s\n'\n" "$(printf %s "$rc" | sed "s/'/''/g")"
-	# ts_<scope> faces link to their parent scope's, some of which it leaves
-	# undefined (ts_markup for ts_markup_bold, ...): define those too
-	faces= names=' '
-	while IFS= read -r l; do
-		case $l in 'set-face global ts_'*) ;; *) continue ;; esac
-		faces="$faces$l
-"
-		l=${l#set-face global }; names="$names${l%% *} "
-	done <<-EOF
-		$rc
-	EOF
-	missing=$faces
-	while [ -n "$missing" ]; do
-		next=
-		while IFS= read -r l; do
-			[ -n "$l" ] || continue
-			p=${l##* }
-			case $names in *" $p "*) continue ;; esac
-			case $p in ts_*) ;; *) continue ;; esac
-			q=${p#ts_}
-			case $q in *_*) q=ts_${q%_*} ;; *) q=default ;; esac
-			names="$names$p "
-			next="${next}set-face global $p $q
-"
-		done <<-EOF
-			$missing
-		EOF
-		faces=$faces$next missing=$next
-	done
-	printf %s "$faces"
-	printf "set-option -add global plugin_faces '%s'\n" "$faces"
-}
-evaluate-commands %sh{
-	[ "$kak_opt_kakrc_loaded" = true ] && exit
-	command -v kak-lsp >/dev/null || exit
-	rc=$(kak-lsp) || exit
-	printf '%s\n' "$rc"
-	printf "set-option -add global plugin_rc '%s\n'\n" "$(printf %s "$rc" | sed "s/'/''/g")"
-	faces=
-	while IFS= read -r l; do
-		case $l in 'set-face global '*) faces="$faces$l
+	if lsp=$(command -v kak-lsp); then
+		f=$cache/plugin-kak-lsp.kak
+		if fresh "$f" "$lsp" "$kak_config/kakrc"; then
+			src "$f"
+		# (kak-lsp started with $kak_session set is a server for it)
+		elif rc=$(unset kak_session; kak-lsp); then
+			{
+				printf '%s\n' "$rc"
+				printf "set-option -add global plugin_rc '%s\n'\n" "$(printf %s "$rc" | sed "s/'/''/g")"
+				faces=
+				while IFS= read -r l; do
+					case $l in 'set-face global '*) faces="$faces$l
 " ;; esac
-	done <<-EOF
-		$rc
-	EOF
-	printf "set-option -add global plugin_faces '%s'\n" "$faces"
+				done <<-EOF
+					$rc
+				EOF
+				printf "set-option -add global plugin_faces '%s'\n" "$faces"
+			} | keep "$f" "$lsp"
+		fi
+	fi
 }
 
 # Faces this kakrc draws with, for colour schemes that don't set them: the
@@ -152,9 +203,16 @@ evaluate-commands %opt{kakrc_faces}
 # --- theme -------------------------------------------------------------------
 # Kakoune ships no onedark; colors/onedark.kak is a port of Helix's, tree-sitter
 # scopes and all. StatusLineInactive (see "inactive status lines" below) is set
-# first so that colour schemes can override it.
+# first so that colour schemes can override it. Sourced straight from here
+# when it's there, as :colorscheme would find it (that looks for it with
+# find(1) in a shell).
 set-face global StatusLineInactive '+d@StatusLine'
-colorscheme onedark
+try %{
+	evaluate-commands "nop %%file{%val{config}/colors/onedark.kak}"
+	source "%val{config}/colors/onedark.kak"
+} catch %{
+	colorscheme onedark
+}
 
 # --- [editor] ----------------------------------------------------------------
 # bufferline = "multiple": drawn in tmux's status line, see the bufferline
@@ -223,12 +281,16 @@ define-command -override -hidden auto-save-all %{
 		}
 	}
 }
+# (without a shell: the client, less the kakmux clients and those with a
+# picker open, is still one: focus-out-one takes one)
+declare-option -hidden str-list focus_out_cmp
+define-command -override -hidden -params 1 focus-out-one nop
 hook -group kakrc global FocusOut .* %{
-	evaluate-commands %sh{
-		case ${kak_client_env_TMUX%%,*} in */kakmux-*) exit ;; esac
-		eval set -- "$kak_quoted_opt_picker_clients"
-		for c; do [ "$c" = "$kak_client" ] && exit; done
-		echo auto-save-all
+	set-option window focus_out_cmp %val{client}
+	set-option -remove window focus_out_cmp %opt{kakmux_clients} %opt{picker_clients}
+	try %{
+		evaluate-commands -verbatim focus-out-one %opt{focus_out_cmp}
+		auto-save-all
 	}
 }
 
@@ -447,16 +509,10 @@ define-command -override -hidden -params 5 git-status-set %{
 # Under kakmux every split is a client of the same session, so the default
 # status line's " - client@[session]" tail is just noise there: strip it from
 # the global modelinefmt, once, when the first kakmux client connects (a
-# session in kakmux has only those). A no-op once the format is customised.
-hook -group kakrc-modeline-kakmux global ClientCreate .* %{
-	evaluate-commands %sh{
-		case ${kak_client_env_TMUX%%,*} in */kakmux-*) ;; *) exit ;; esac
-		echo 'remove-hooks global kakrc-modeline-kakmux'
-		fmt=$(printf %s "$kak_opt_modelinefmt" | sed 's/ - %val{client}@\[%val{session}\]$//')
-		[ "$fmt" = "$kak_opt_modelinefmt" ] && exit
-		printf "set-option global modelinefmt '%s'\n" "$(printf %s "$fmt" | sed "s/'/''/g")"
-	}
-}
+# session in kakmux has only those; client-hello, see splits). A no-op once
+# the format is customised.
+declare-option -hidden str modeline_kakmux
+set-option global modeline_kakmux armed
 
 # Helix defaults that Kakoune doesn't turn on by itself. The gutter's columns
 # go right to left in the order they're added: the git gutter (see below)
@@ -1805,35 +1861,44 @@ map global user C ':comment-block<ret>' -docstring 'toggle block comments'
 
 # --- system clipboard ----------------------------------------------------------
 # Helix's <space>y/Y/p/P/R. The clipboard is Windows' under WSL (win32yank),
-# Wayland's, or X's.
+# Wayland's, or X's: the tool is found on first use (not at startup: under
+# WSL, $PATH goes through Windows' directories, which is slow to look in),
+# unless clipboard_copy/clipboard_paste are set already.
 declare-option -hidden str clipboard_copy
 declare-option -hidden str clipboard_paste
-evaluate-commands %sh{
-	if command -v win32yank.exe >/dev/null; then
-		copy='win32yank.exe -i --crlf' paste='win32yank.exe -o --lf'
-	elif [ -n "$WAYLAND_DISPLAY" ] && command -v wl-copy >/dev/null; then
-		copy='wl-copy' paste='wl-paste --no-newline'
-	elif command -v xclip >/dev/null; then
-		copy='xclip -selection clipboard -i' paste='xclip -selection clipboard -o'
-	else
-		exit
+# (for the scripts below: sets copy and paste, and says to keep them)
+declare-option -hidden str clipboard_sh %{
+	copy=$kak_opt_clipboard_copy paste=$kak_opt_clipboard_paste
+	if [ -z "$copy" ] || [ -z "$paste" ]; then
+		if command -v win32yank.exe >/dev/null; then
+			c='win32yank.exe -i --crlf' p='win32yank.exe -o --lf'
+		elif [ -n "$WAYLAND_DISPLAY" ] && command -v wl-copy >/dev/null; then
+			c='wl-copy' p='wl-paste --no-newline'
+		elif command -v xclip >/dev/null; then
+			c='xclip -selection clipboard -i' p='xclip -selection clipboard -o'
+		else
+			c= p=
+		fi
+		[ -n "$copy" ] || { copy=$c; echo "set-option global clipboard_copy '$c'"; }
+		[ -n "$paste" ] || { paste=$p; echo "set-option global clipboard_paste '$p'"; }
 	fi
-	echo "set-option global clipboard_copy '$copy'"
-	echo "set-option global clipboard_paste '$paste'"
 }
 # clipboard-yank [-main]: the selections, one per line (or just the main one)
 define-command -override -hidden -params ..1 clipboard-yank %{
 	evaluate-commands %sh{
-		[ -n "$kak_opt_clipboard_copy" ] || { echo "fail 'clipboard: no clipboard tool'"; exit; }
-		if [ "$1" = -main ]; then
-			printf %s "$kak_selection" | eval "$kak_opt_clipboard_copy" >/dev/null 2>&1
+		# (kak_opt_clipboard_copy kak_opt_clipboard_paste)
+		main=$1
+		eval "$kak_opt_clipboard_sh"
+		[ -n "$copy" ] || { echo "fail 'clipboard: no clipboard tool'"; exit; }
+		if [ "$main" = -main ]; then
+			printf %s "$kak_selection" | eval "$copy" >/dev/null 2>&1
 			n=1
 		else
 			eval set -- "$kak_quoted_selections"
 			n=$# all= sep=
 			for s; do all="$all$sep$s" sep='
 '; done
-			printf %s "$all" | eval "$kak_opt_clipboard_copy" >/dev/null 2>&1
+			printf %s "$all" | eval "$copy" >/dev/null 2>&1
 		fi
 		echo "echo -markup '{Information}yanked $n selection(s) to the clipboard'"
 	}
@@ -1855,7 +1920,9 @@ define-command -override -hidden -params 1 clipboard-paste %{
 					esac
 				done
 			}
-			text=$(eval "$kak_opt_clipboard_paste" 2>/dev/null; echo .); text=${text%.}
+			# (kak_opt_clipboard_copy kak_opt_clipboard_paste)
+			eval "$kak_opt_clipboard_sh"
+			text=$(eval "$paste" 2>/dev/null; echo .); text=${text%.}
 			nl='
 '
 			if [ "$kak_selection_count" -gt 1 ]; then
@@ -3045,26 +3112,12 @@ define-command -override -hidden bufferline-send %{
 
 # Idle hooks catch every change (new/closed buffer, switch, first edit, save)
 # once keys stop; FocusIn catches changes another client made. Only for
-# kakmux clients: kakmux_clients lists them (one shell as each connects), and
-# the check is without one (the client, less those, is nothing).
+# kakmux clients: kakmux_clients lists them (as each connects, client-hello
+# in splits below), and the check is without a shell (the client, less
+# those, is nothing).
 declare-option -hidden str-list kakmux_clients
 declare-option -hidden str-list kakmux_cmp
 define-command -override -hidden -params 0 kakmux-none nop
-hook -group kakrc global ClientCreate .* %{
-	evaluate-commands %sh{
-		case ${kak_client_env_TMUX%%,*} in */kakmux-*)
-			echo 'set-option -add global kakmux_clients %val{client}' ;;
-		esac
-	}
-}
-hook -group kakrc global ClientRenamed .* %{
-	evaluate-commands %sh{
-		printf "set-option -remove global kakmux_clients '%s'\n" "$(printf %s "${kak_hook_param%:*}" | sed "s/'/''/g")"
-		case ${kak_client_env_TMUX%%,*} in */kakmux-*)
-			echo 'set-option -add global kakmux_clients %val{client}' ;;
-		esac
-	}
-}
 hook -group kakrc global ClientClose .* %{ set-option -remove global kakmux_clients %val{hook_param} }
 define-command -override -hidden bufferline-idle %{
 	try %{
@@ -3573,7 +3626,7 @@ define-command -override weight -params ..2 -docstring 'weight [-width|-height] 
 }
 
 # close every other split: the window's other panes labelled with this
-# session (see pane-label below), not shells or other sessions' clients
+# session (see client-hello below), not shells or other sessions' clients
 # sharing the window. With one pane left, the weights only name panes gone.
 define-command -override -hidden split-only %{
 	evaluate-commands %sh{
@@ -3624,16 +3677,41 @@ define-command -override -hidden -params 1 split-focus %{
 
 # Each client labels its tmux pane with @kak_session and @kak_client, so tools
 # outside kak can reach the client in a pane (broot-open opens files there).
-define-command -override -hidden pane-label %{
-	nop %sh{
+# All that's done as a client connects (or is renamed) is in one shell: the
+# label (in the background: nothing waits on tmux), kakmux_clients (see
+# bufferline), the status line's kakmux tail (see status line).
+define-command -override -hidden client-hello %{
+	evaluate-commands %sh{
+		# kak-quoted, in $r (all in the shell, no other processes)
+		kq() {
+			r= rest=$1
+			while :; do
+				case $rest in
+				*"'"*) r="$r${rest%%"'"*}''" rest=${rest#*"'"} ;;
+				*) r="'$r$rest'"; return ;;
+				esac
+			done
+		}
+		if [ -n "$kak_hook_param" ] && [ "$kak_hook_param" != "$kak_client" ]; then
+			# renamed: OLD:NEW
+			kq "${kak_hook_param%:*}"; echo "set-option -remove global kakmux_clients $r"
+		fi
+		case ${kak_client_env_TMUX%%,*} in */kakmux-*)
+			echo 'set-option -add global kakmux_clients %val{client}'
+			if [ "$kak_opt_modeline_kakmux" = armed ]; then
+				echo "set-option global modeline_kakmux ''"
+				fmt=${kak_opt_modelinefmt%" - %val{client}@[%val{session}]"}
+				[ "$fmt" = "$kak_opt_modelinefmt" ] || { kq "$fmt"; echo "set-option global modelinefmt $r"; }
+			fi ;;
+		esac
 		[ -n "$kak_client_env_TMUX_PANE" ] || exit
 		TMUX="$kak_client_env_TMUX" tmux \
 			set-option -p -t "$kak_client_env_TMUX_PANE" @kak_session "$kak_session" \; \
-			set-option -p -t "$kak_client_env_TMUX_PANE" @kak_client "$kak_client" >/dev/null 2>&1
+			set-option -p -t "$kak_client_env_TMUX_PANE" @kak_client "$kak_client" >/dev/null 2>&1 </dev/null &
 	}
 }
-hook -group kakrc global ClientCreate  .* pane-label
-hook -group kakrc global ClientRenamed .* pane-label
+hook -group kakrc global ClientCreate  .* client-hello
+hook -group kakrc global ClientRenamed .* client-hello
 
 # run-in-focused-client CMD: run kak commands CMD in the client focused last
 # (else any), for tools outside kak that only know its session: broot-open
@@ -3772,13 +3850,21 @@ hook -group kakrc global BufSetOption filetype=.* indent-lang
 # At open (one shell): .editorconfig, else the file's own indentation. The
 # detection is Helix's in short: lines indented with tabs against lines
 # with spaces, and for spaces, the most common step up from one indented
-# line to the next (1 to 8; on a tie the smaller).
+# line to the next (1 to 8; on a tie the smaller). The editorconfig tool is
+# looked for once a session (editorconfig_tool: none, or the command; under
+# WSL $PATH goes through Windows' directories, slow to look in).
+declare-option -hidden str editorconfig_tool
 define-command -override -hidden indent-detect %{
 	evaluate-commands %sh{
 		case $kak_buffile in /*) ;; *) exit ;; esac
 		w=
-		if command -v editorconfig >/dev/null 2>&1; then
-			props=$(editorconfig "$kak_buffile" 2>/dev/null)
+		ec=$kak_opt_editorconfig_tool
+		if [ -z "$ec" ]; then
+			ec=$(command -v editorconfig 2>/dev/null) || ec=none
+			printf "set-option global editorconfig_tool '%s'\n" "$(printf %s "$ec" | sed "s/'/''/g")"
+		fi
+		if [ "$ec" != none ]; then
+			props=$("$ec" "$kak_buffile" 2>/dev/null)
 			case $props in *=*)
 				echo 'try %{ editorconfig-load }'
 				case $props in *indent_style=tab*|*indent_style=space*)
@@ -3790,7 +3876,8 @@ define-command -override -hidden indent-detect %{
 			esac
 		fi
 		[ -z "$w" ] && [ -r "$kak_buffile" ] || exit
-		head -n 1000 -- "$kak_buffile" 2>/dev/null | awk '
+		awk '
+			NR > 1000 { exit }
 			/^[ \t]*$/ { next }
 			{
 				match($0, /^[ \t]*/); ws = substr($0, 1, RLENGTH)
@@ -3810,7 +3897,7 @@ define-command -override -hidden indent-detect %{
 				}
 				print "set-option buffer indentwidth " w
 				print "set-option buffer indent_width_from detected"
-			}'
+			}' < "$kak_buffile" 2>/dev/null
 	}
 }
 hook -group kakrc global BufOpenFile .* indent-detect
