@@ -520,7 +520,13 @@ set-option global modeline_kakmux armed
 # Helix defaults that Kakoune doesn't turn on by itself. The gutter's columns
 # go right to left in the order they're added: the git gutter (see below)
 # right of the line numbers, diagnostics (kak-lsp, later) left of them.
+# Each is always there, a column wide, as Helix's are: flag-lines is as wide
+# as its widest flag, so each option holds a blank one for line 0 (which
+# no line has, and which Kakoune never drops); kak-lsp's has its own.
+# Else the text moves a column right when a file gets its first change,
+# and back when it has none.
 declare-option -hidden line-specs git_gutter_flags
+set-option global git_gutter_flags 0 '0| '
 add-highlighter -override global/git-gutter flag-lines Default git_gutter_flags
 add-highlighter -override global/ number-lines -hlcursor
 add-highlighter -override global/ show-matching
@@ -1079,13 +1085,11 @@ declare-option -hidden str line_diags_sh %{
 			lead="$lead{Default}"; blanks $(($2 - at))
 		}
 		# text width: the window less the gutter (diagnostic flags, line
-		# numbers, │, and the git gutter's column when its last diff found
-		# changes, see git_gutter_any) and
-		# the end-of-line mark show-whitespaces draws after each line (these
-		# included: a line any wider wraps)
+		# numbers, │, the git gutter's column) and the end-of-line mark
+		# show-whitespaces draws after each line (these included: a line
+		# any wider wraps)
 		digits=${#kak_buf_line_count}; [ "$digits" -ge 2 ] || digits=2
-		width=$((kak_window_width - digits - 3))
-		[ -n "$kak_opt_git_gutter_any" ] && width=$((width - 1))
+		width=$((kak_window_width - digits - 4))
 		# a line that wraps puts its columns elsewhere on screen, and one
 		# too far right leaves too little room (under 20 columns) right of
 		# it: then just the messages, from the left. No line drawn here may
@@ -1233,7 +1237,7 @@ define-command -override -hidden lsp-show-goto-buffer -params 4..5 %{
 	try %{ evaluate-commands -draft %{ execute-keys ',;x'; set-option window line_diags_text %val{selection} } }
 	evaluate-commands %sh{
 		# (read by line_diags_sh: kak_buffile kak_cursor_line kak_window_width
-		# kak_buf_line_count kak_opt_tabstop kak_opt_git_gutter_any
+		# kak_buf_line_count kak_opt_tabstop
 		# kak_quoted_opt_lsp_inlay_diagnostics
 		# kak_quoted_opt_inline_diagnostics_severities)
 		eval "$kak_opt_line_diags_sh"
@@ -1313,7 +1317,7 @@ define-command -override -hidden line-diags-render %{
 		execute-keys ',;x'
 		evaluate-commands %sh{
 			# (read by line_diags_sh: kak_cursor_line kak_window_width
-			# kak_buf_line_count kak_opt_tabstop kak_opt_git_gutter_any
+			# kak_buf_line_count kak_opt_tabstop
 			# kak_quoted_opt_lsp_inlay_diagnostics
 			# kak_quoted_opt_inline_diagnostics_severities)
 			eval "$kak_opt_line_diags_sh"
@@ -1327,8 +1331,7 @@ define-command -override -hidden line-diags-render %{
 define-command -override -hidden -params .. line-diags-draw %{
 	evaluate-commands %sh{
 		# (read by line_diags_sh: kak_cursor_line kak_window_width
-		# kak_buf_line_count kak_opt_git_gutter_any
-		# kak_quoted_opt_lsp_inlay_diagnostics)
+		# kak_buf_line_count kak_quoted_opt_lsp_inlay_diagnostics)
 		eval "$kak_opt_line_diags_sh"
 		dcols=; eval "for d in $kak_quoted_opt_line_diags_dcols; do dcols=\"\$dcols \$d\"; done"
 		eolcol=$kak_opt_line_diags_eolcol lineend=${kak_selection_desc##*,}
@@ -1378,20 +1381,19 @@ hook -group kakrc global WinDisplay .* %{ set-option window line_diags_seen 0 }
 # width. Left wider than the window, Kakoune 2026.05.21 can crash on them
 # ("cannot create std::vector larger than max_size()", shrinking a split
 # showing a long wrapped line's diagnostics). Kakoune says so too when only
-# the gutter's width changes, which it does as a line with the git gutter's
-# only flag is typed in (the flag goes until the gutter is worked out
-# again), twice a key: so only when the size, the git gutter's column or the
-# line count (its digits) are not what they were (compared without a shell:
-# the key less the last one is nothing then, as line-diags-none takes).
+# the gutter's width changes (the line numbers' digits): so only when the
+# size or the line count (its digits) are not what they were (compared
+# without a shell: the key less the last one is nothing then, as
+# line-diags-none takes).
 # (In each client: WinResize runs without one, its cursor on line 1.)
 define-command -override -hidden -params 0 line-diags-none nop
 define-command -override -hidden line-diags-resized %{
-	set-option window line_diags_cmp "%val{window_height}.%val{window_width}|%opt{git_gutter_any}|%val{buf_line_count}"
+	set-option window line_diags_cmp "%val{window_height}.%val{window_width}|%val{buf_line_count}"
 	set-option -remove window line_diags_cmp %opt{line_diags_size}
 	try %{
 		evaluate-commands -verbatim line-diags-none %opt{line_diags_cmp}
 	} catch %{
-		set-option window line_diags_size "%val{window_height}.%val{window_width}|%opt{git_gutter_any}|%val{buf_line_count}"
+		set-option window line_diags_size "%val{window_height}.%val{window_width}|%val{buf_line_count}"
 		set-option window line_diags_seen 0
 		line-diags-idle
 	}
@@ -1508,13 +1510,11 @@ map global user g ':changed-file-picker<ret>'           -docstring 'changed file
 
 # buffer: whether it's a file in HEAD ('' not known yet, pending: being
 # found out, yes, no), its repository and path there, the timestamp of the
-# latest run (the one whose flags count), and whether that found any changes
-# (yes, or '': the gutter's column is there or not)
+# latest run (the one whose flags count)
 declare-option -hidden str git_gutter_state
 declare-option -hidden str git_gutter_root
 declare-option -hidden str git_gutter_path
 declare-option -hidden int git_gutter_seen -1
-declare-option -hidden str git_gutter_any
 
 # (checks without a shell: these exist for the states they accept)
 define-command -override -hidden git-gutter-known-yes nop
@@ -1634,8 +1634,7 @@ define-command -override -hidden -params .. git-gutter-located-yes-no nop
 define-command -override -hidden -params .. git-gutter-located-yes-yes nop
 define-command -override -hidden -params 1 git-gutter-located-pending-no %{
 	set-option buffer git_gutter_state no
-	set-option buffer git_gutter_flags 0
-	set-option buffer git_gutter_any ''
+	unset-option buffer git_gutter_flags
 }
 define-command -override -hidden -params 4 git-gutter-located-pending-yes %{
 	set-option buffer git_gutter_root %arg{2}
@@ -1699,20 +1698,13 @@ define-command -override -hidden -params 3 git-gutter-diff %{
 }
 # git-gutter-set TIMESTAMP FLAGS...: from the latest run only (a slower,
 # older one finishing later is dropped); git_gutter_seen less TIMESTAMP is
-# 0 for that one. git_gutter_any: whether there are flags (more than one
-# argument: git-gutter-stamp takes one).
-define-command -override -hidden -params 1 git-gutter-stamp nop
+# 0 for that one.
 define-command -override -hidden -params 1.. git-gutter-set %{
 	set-option -remove buffer git_gutter_seen %arg{1}
 	try %{
 		evaluate-commands "git-gutter-same-%opt{git_gutter_seen}"
 		set-option buffer git_gutter_flags %arg{@}
-		try %{
-			evaluate-commands -verbatim git-gutter-stamp %arg{@}
-			set-option buffer git_gutter_any ''
-		} catch %{
-			set-option buffer git_gutter_any yes
-		}
+		set-option -add buffer git_gutter_flags '0| '
 	}
 	set-option -add buffer git_gutter_seen %arg{1}
 }
@@ -1748,10 +1740,12 @@ define-command -override -hidden git-hunk-object %{
 		case $kak_object_flags in *to_begin*) dir=prev ;; *) dir=next ;; esac
 		eval set -- "$kak_quoted_opt_git_gutter_flags"
 		shift
-		# hunks: runs of consecutive lines, as start-end
+		# hunks: runs of consecutive lines, as start-end (line 0's blank flag
+		# aside)
 		cur=$kak_cursor_line best= start= prev=
 		for e in "$@" ''; do
 			l=${e%%|*}
+			[ "$l" = 0 ] && continue
 			if [ -n "$start" ] && { [ -z "$l" ] || [ "$l" -ne $((prev + 1)) ]; }; then
 				if [ "$dir" = next ] && [ "$start" -gt "$cur" ]; then
 					echo "select $start.1,$prev.1; execute-keys x"; exit
@@ -2131,10 +2125,12 @@ define-command -override -hidden -params 1 git-hunk-goto %{
 		mode=$1
 		eval set -- "$kak_quoted_opt_git_gutter_flags"
 		[ $# -gt 0 ] && shift
-		# hunks: runs of consecutive lines, as start-end
+		# hunks: runs of consecutive lines, as start-end (line 0's blank flag
+		# aside)
 		cur=$kak_cursor_line hit= start= prev=
 		for e in "$@" ''; do
 			l=${e%%|*}
+			[ "$l" = 0 ] && continue
 			if [ -n "$start" ] && { [ -z "$l" ] || [ "$l" -ne $((prev + 1)) ]; }; then
 				case $mode in
 				next) [ "$start" -gt "$cur" ] && { hit="$start.1,$prev.1"; break; } ;;
