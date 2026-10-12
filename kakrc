@@ -1773,7 +1773,10 @@ map global zview r z               -docstring 'restore selections (Kakoune''s z)
 # ]d uses kak-lsp's lsp-find-error: the diagnostic object (above) only works
 # from object mode, which a user mode's keys can't continue into. Its
 # --previous counts one under the cursor, hence a step left first. Both wrap
-# around at the ends, as Helix's do.
+# around at the ends, as Helix's do. ]D [D pick the last/first of the same
+# list themselves (diagnostic-goto, below): lsp-find-error from the buffer's
+# end or start misses one at the very first character, or past the last
+# (clangd's "expected '}'" at the end of a file).
 try %{ declare-user-mode next }
 try %{ declare-user-mode prev }
 map global normal ] ':enter-user-mode next<ret>' -docstring 'next (Helix ])'
@@ -1782,8 +1785,8 @@ map global next ] ]  -docstring 'select to object end (Kakoune''s ])'
 map global prev [ [  -docstring 'select to object start (Kakoune''s [)'
 map global next d ':lsp-find-error error warning info hint<ret>'               -docstring 'diagnostic'
 map global prev d ';h:lsp-find-error --previous error warning info hint<ret>'  -docstring 'diagnostic'
-map global next D 'ge:lsp-find-error --previous error warning info hint<ret>'  -docstring 'last diagnostic'
-map global prev D 'gg:lsp-find-error error warning info hint<ret>'             -docstring 'first diagnostic'
+map global next D ':diagnostic-goto last<ret>'   -docstring 'last diagnostic'
+map global prev D ':diagnostic-goto first<ret>'  -docstring 'first diagnostic'
 map global next g ':git-hunk-goto next<ret>'  -docstring 'git change'
 map global prev g ':git-hunk-goto prev<ret>'  -docstring 'git change'
 map global next G ':git-hunk-goto last<ret>'  -docstring 'last git change'
@@ -1804,6 +1807,28 @@ map global next p ]p      -docstring 'paragraph'
 map global prev p [p      -docstring 'paragraph'
 map global next <space> <a-o> -docstring 'add blank line below'
 map global prev <space> <a-O> -docstring 'add blank line above'
+# diagnostic-goto first|last: select the buffer's first or last diagnostic of
+# kak-lsp's (its range, cursor at the start, as lsp-find-error does); one past
+# the buffer's end ends up on its last character
+define-command -override -hidden -params 1 diagnostic-goto %{
+	evaluate-commands %sh{
+		which=$1
+		eval set -- "$kak_quoted_opt_lsp_inline_diagnostics"
+		[ $# -gt 0 ] && shift
+		hit= key=
+		for e; do
+			case $e in *'|DiagnosticError'|*'|DiagnosticWarning'|*'|DiagnosticInfo'|*'|DiagnosticHint') ;; *) continue ;; esac
+			r=${e%|*} s=${e%%,*}
+			k=$(( ${s%.*} * 1048576 + ${s#*.} ))
+			if [ -z "$hit" ] || { [ "$which" = first ] && [ "$k" -lt "$key" ]; } || { [ "$which" = last ] && [ "$k" -ge "$key" ]; }; then
+				hit=$r key=$k
+			fi
+		done
+		# (as lsp-find-error says it)
+		[ -n "$hit" ] || { echo "echo -markup '{Error}No diagnostics found of types: error warning info hint'"; exit; }
+		echo "select ${hit#*,},${hit%,*}"
+	}
+}
 # git-hunk-goto next|prev|first|last: select that change's lines (from the
 # git gutter's flags; the git change object, <a-i>g ]]g, finds them alike)
 define-command -override -hidden -params 1 git-hunk-goto %{
