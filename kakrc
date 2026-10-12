@@ -2208,6 +2208,55 @@ define-command -override -hidden jump-labels-clear %{
 map global normal <ret>   ': jump-labels<ret>'         -docstring 'jump to a word (labels)'
 map global normal <s-ret> ': jump-labels -extend<ret>' -docstring 'extend to a word (labels)'
 
+# --- explorer (<space>e, <space>E) ------------------------------------------------
+# Helix's file explorer, as broot beside kak: in kakbr, its sidebar gets the
+# focus (found out from the kakmux, as split-focus goes, by @outer_pane);
+# elsewhere in tmux, broot opens in a split to the left, 25% of the window
+# within 24..40 columns as kakbr's, at the buffer's workspace root (<space>e)
+# or its file's directory (<space>E), or if one is open in this window
+# already, that gets the focus. Files open in this kak: broot-open (Enter, and
+# double-click through the opener dir put first on its PATH) finds the kak
+# pane beside it. broot reads kakbr's broot.hjson (git on) when there is one.
+# Under kakmux the split is weighted like the others (bin/kakmux-even).
+define-command -override explorer -params ..1 -docstring "explorer [-buffer-dir]: broot beside kak at the workspace root (or the buffer's directory); in kakbr, its sidebar" %{
+	evaluate-commands %sh{
+		if [ -z "$kak_client_env_TMUX" ] || [ -z "$kak_client_env_TMUX_PANE" ]; then
+			echo "fail 'explorer: needs tmux (:kakmux, kakbr)'"; exit
+		fi
+		socket=${kak_client_env_TMUX%%,*} pane=$kak_client_env_TMUX_PANE
+		t() { tmux -S "$socket" "$@"; }
+		s=$socket p=$pane
+		while outer=$(tmux -S "$s" show-options -qv -t "$p" @outer_pane 2>/dev/null) && [ -n "$outer" ]; do
+			s=${outer%% *} p=${outer#* }
+			side=$(tmux -S "$s" show-options -wqv -t "$p" @kakbr_side 2>/dev/null)
+			if [ -n "$side" ]; then
+				tmux -S "$s" select-pane -t "$side" >/dev/null 2>&1; exit
+			fi
+		done
+		ex=$(t list-panes -t "$pane" -F '#{pane_id} #{@kak_explorer}' 2>/dev/null | awk '$2 == 1 { print $1; exit }')
+		if [ -n "$ex" ]; then t select-pane -t "$ex" >/dev/null 2>&1; exit; fi
+		dir=${kak_opt_workspace_root:-$PWD}
+		if [ "$1" = -buffer-dir ]; then
+			case $kak_buffile in /*) dir=${kak_buffile%/*} ;; esac
+		fi
+		w=$(t display-message -p -t "$pane" '#{window_width}') || exit
+		want=$((w / 4)); [ "$want" -lt 24 ] && want=24; [ "$want" -gt 40 ] && want=40
+		case $socket in */kakmux-*)
+			t set-option -w -t "$pane" @kakmux_ratio $((100 - want * 100 / w)) ;;
+		esac
+		conf=${XDG_CONFIG_HOME:-$HOME/.config}/kakbr/broot.hjson
+		[ -e "$conf" ] || conf=
+		id=$(t split-window -h -b -l "$want" -t "$pane" -c "$dir" -P -F '#{pane_id}' -- \
+			env PATH="$HOME/.local/lib/broot-opener:$PATH" broot ${conf:+--conf "$conf"} "$dir" 2>/dev/null) || {
+			t set-option -wu -t "$pane" @kakmux_ratio >/dev/null 2>&1
+			echo "fail 'explorer: tmux split-window failed'"; exit
+		}
+		t set-option -p -t "$id" @kak_explorer 1 >/dev/null 2>&1
+	}
+}
+map global user e ':explorer<ret>'             -docstring 'file explorer (workspace root)'
+map global user E ':explorer -buffer-dir<ret>' -docstring "file explorer (buffer's directory)"
+
 # --- splits (tmux) ------------------------------------------------------------
 # A split is a tmux pane running another client of this session, so all
 # splits share buffers. Helix's :vsplit/:hsplit and <c-w> (also <space>w)
