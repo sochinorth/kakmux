@@ -1756,8 +1756,8 @@ map global zview <c-u> <c-u>       -docstring 'half page up'
 map global zview <c-d> <c-d>       -docstring 'half page down'
 map global zview <backspace> <c-u> -docstring 'half page up'
 map global zview <space> <c-d>     -docstring 'half page down'
-map global zview / /               -docstring 'search forward'
-map global zview ? <a-/>           -docstring 'search backward'
+map global zview / ':smart-case-arm<ret>/(?i)'     -docstring 'search forward'
+map global zview ? ':smart-case-arm<ret><a-/>(?i)' -docstring 'search backward'
 map global zview n n               -docstring 'next match'
 map global zview N <a-n>           -docstring 'previous match'
 map global zview s Z               -docstring 'save selections (Kakoune''s Z)'
@@ -2206,8 +2206,8 @@ try %{
 }
 
 # --- search: smart case --------------------------------------------------------
-# Helix's search.smart-case: / ? <a-/> <a-?> are case-insensitive unless the
-# pattern has an uppercase letter. Kakoune's search prompt can't be read
+# Helix's search.smart-case: / ? <a-/> <a-?> (and z/ z?, see view mode above)
+# are case-insensitive unless the pattern has an uppercase letter. Kakoune's search prompt can't be read
 # while typing, so the prompt opens with (?i) in it, which goes as soon as an
 # uppercase letter is typed (a RawKey hook while it's open; a key run from a
 # hook goes to the prompt). It stays in the pattern otherwise, and so in the
