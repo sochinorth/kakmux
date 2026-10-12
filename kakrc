@@ -102,8 +102,8 @@ evaluate-commands %sh{
 }
 
 # Faces this kakrc draws with, for colour schemes that don't set them: the
-# hover/completion docs kak-lsp writes in markup, the modeline's diagnostic
-# counts, the git gutter. Kept beside the plugins' defaults above.
+# hover/completion docs kak-lsp writes in markup, the status line's mode,
+# git and diagnostic counts, the git gutter. Kept beside the plugins' defaults above.
 declare-option -hidden str kakrc_faces
 set-option global kakrc_faces %{
 set-face global InfoDefault Information
@@ -121,6 +121,11 @@ set-face global InfoDiagnosticInformation blue
 set-face global InfoDiagnosticHint green
 set-face global StatusLineError red
 set-face global StatusLineWarning yellow
+set-face global StatusLineModeInsert StatusLineMode
+set-face global StatusLineGit StatusLineInfo
+set-face global StatusLineGitAdded green
+set-face global StatusLineGitModified yellow
+set-face global StatusLineGitUntracked StatusLine
 set-face global GitGutterAdd green
 set-face global GitGutterModify yellow
 set-face global GitGutterDelete red
@@ -266,7 +271,7 @@ alias global x!   write-quit!
 # split) doesn't have focus draws its status line in StatusLineInactive. That
 # defaults to the status line dimmed; colour schemes may set their own.
 # Add to statusline_faces any face a custom modelinefmt uses.
-declare-option str-list statusline_faces StatusLine StatusLineMode StatusLineInfo StatusLineValue StatusCursor StatusLineError StatusLineWarning
+declare-option str-list statusline_faces StatusLine StatusLineMode StatusLineInfo StatusLineValue StatusCursor StatusLineError StatusLineWarning StatusLineModeInsert StatusLineGit StatusLineGitAdded StatusLineGitModified StatusLineGitUntracked
 declare-option -hidden str-list unfocused_clients
 
 # faces live per window (client + buffer), so reapply on every buffer switch.
@@ -324,6 +329,90 @@ hook -group kakrc global FocusIn .* %{
 hook -group kakrc global WinDisplay .* statusline-apply-focus
 hook -group kakrc global ClientClose .* %{ set-option -remove global unfocused_clients %val{hook_param} }
 
+# --- status line ---------------------------------------------------------------
+# Helix's, as far as Kakoune's (drawn right-aligned, after any message) goes:
+#     INS  ⎇ main +1 ~2 ?1 │ src/point.c [+] │ ● 1 ● 3 │ ⣾ │ 3 sels │ 12:4
+# each part only when there's something to show: the mode unless normal,
+# the workspace's git branch (a short hash when detached) and its files
+# staged/modified/untracked, the file from the workspace root, unsaved
+# changes, warnings and errors (kak-lsp's counts, see inline diagnostics),
+# language server progress, selections when more than one, the cursor.
+# All of it is options set by hooks, none of it worked out as it's drawn:
+# the git part in the background as the gutter locates the buffer (first
+# shown, saved, focused: see git gutter), the rest without a shell. Set
+# once; :config-reload leaves it as it is.
+declare-option -hidden str modeline_ins
+declare-option -hidden str modeline_mode
+declare-option -hidden str modeline_sels
+declare-option -hidden str modeline_modified
+declare-option -hidden str modeline_lsp_sep
+declare-option -hidden str workspace_bufname
+declare-option -hidden str git_branch
+declare-option -hidden str git_staged
+declare-option -hidden str git_modified
+declare-option -hidden str git_untracked
+declare-option -hidden str git_sep
+declare-option -hidden str lsp_diag_sep
+# (kak-lsp's, should it not be there)
+declare-option -hidden str lsp_modeline_progress
+declare-option -hidden str lsp_modeline_message_requests
+try %{
+	evaluate-commands "kakrc-first-%opt{kakrc_loaded}"
+	set-option global modelinefmt %{{StatusLineModeInsert}%opt{modeline_ins}{StatusLineMode}%opt{modeline_mode}{StatusLineGit}%opt{git_branch}{StatusLineGitAdded}%opt{git_staged}{StatusLineGitModified}%opt{git_modified}{StatusLineGitUntracked}%opt{git_untracked}{StatusLine}%opt{git_sep} %opt{workspace_bufname}%opt{modeline_modified}%opt{lsp_diag_sep}{StatusLineWarning}%opt{lsp_diag_warnings}{StatusLineError}%opt{lsp_diag_errors}{StatusLine}%opt{modeline_lsp_sep}{StatusLineInfo}%opt{lsp_modeline_progress}%opt{lsp_modeline_message_requests}{StatusLine}%opt{modeline_sels} │ %val{cursor_line}:%val{cursor_char_column} - %val{client}@[%val{session}]}
+}
+
+# The mode, Helix's colours: insert, and the menus Kakoune names (a user
+# mode's own name isn't known: <space>, <c-w>, m... are all "user"). Prompts
+# aren't named: the prompt shows at the left of the same line.
+hook -group kakrc global ModeChange (push|pop):.*:normal %{
+	set-option window modeline_ins ''
+	set-option window modeline_mode ''
+}
+hook -group kakrc global ModeChange (push|pop):.*:insert %{ set-option window modeline_ins ' INS ' }
+hook -group kakrc global ModeChange (push|pop):.*:next-key\[user-mapping\] %{ set-option window modeline_mode ' USER ' }
+hook -group kakrc global ModeChange (push|pop):.*:next-key\[goto\] %{ set-option window modeline_mode ' GOTO ' }
+hook -group kakrc global ModeChange (push|pop):.*:next-key\[view\] %{ set-option window modeline_mode ' VIEW ' }
+hook -group kakrc global ModeChange (push|pop):.*:next-key\[object\] %{ set-option window modeline_mode ' OBJECT ' }
+
+# Unsaved changes and the selection count, whenever keys stop (and as a
+# window shows, a buffer is written): a command per value, no shell.
+define-command -override -hidden modeline-modified-true %{ set-option buffer modeline_modified ' [+]' }
+define-command -override -hidden modeline-modified-false %{ set-option buffer modeline_modified '' }
+define-command -override -hidden modeline-sels-1 %{ set-option window modeline_sels '' }
+define-command -override -hidden modeline-idle %{
+	evaluate-commands "modeline-modified-%val{modified}"
+	try %{ evaluate-commands "modeline-sels-%val{selection_count}" } catch %{
+		set-option window modeline_sels " │ %val{selection_count} sels"
+	}
+}
+hook -group kakrc global NormalIdle .* modeline-idle
+hook -group kakrc global InsertIdle .* %{ evaluate-commands "modeline-modified-%val{modified}" }
+hook -group kakrc global WinDisplay .* modeline-idle
+hook -group kakrc global BufWritePost .* modeline-modified-false
+# language server progress (kak-lsp's spinner, global)
+hook -group kakrc global GlobalSetOption lsp_modeline_progress= %{ set-option global modeline_lsp_sep '' }
+hook -group kakrc global GlobalSetOption lsp_modeline_progress=.+ %{ set-option global modeline_lsp_sep ' │ ' }
+
+# git-status-set ROOT BRANCH STAGED MODIFIED UNTRACKED: from the background
+# git status (git-gutter-locate), for every buffer of the workspace ROOT
+# (its root, less ROOT, is nothing: git-status-none takes no arguments)
+declare-option -hidden str-list git_status_cmp
+define-command -override -hidden -params 0 git-status-none nop
+define-command -override -hidden -params 5 git-status-set %{
+	evaluate-commands -buffer * %{
+		set-option buffer git_status_cmp %opt{workspace_root}
+		set-option -remove buffer git_status_cmp %arg{1}
+		try %{
+			evaluate-commands -verbatim git-status-none %opt{git_status_cmp}
+			set-option buffer git_branch %arg{2}
+			set-option buffer git_staged %arg{3}
+			set-option buffer git_modified %arg{4}
+			set-option buffer git_untracked %arg{5}
+			set-option buffer git_sep ' │'
+		}
+	}
+}
+
 # Under kakmux every split is a client of the same session, so the default
 # status line's " - client@[session]" tail is just noise there: strip it from
 # the global modelinefmt, once, when the first kakmux client connects (a
@@ -369,14 +458,10 @@ try %{
 	set-option global lsp_inlay_diagnostic_sign ''
 	set-option global lsp_inlay_diagnostic_gap ' '
 	# lsp.display-progress-messages: progress (and pending server messages)
-	# at the start of the modeline. Not the rest of kak-lsp's modeline: no
-	# breadcrumbs (Helix has none, and they're a request whenever keys stop).
-	# Added to the front once, not again on each config-reload.
+	# in the status line (see "status line" above). Not the rest of kak-lsp's
+	# modeline: no breadcrumbs (Helix has none, and they're a request
+	# whenever keys stop).
 	remove-hooks global lsp-breadcrumbs
-	try %{
-		evaluate-commands "kakrc-first-%opt{kakrc_loaded}"
-		set-option global modelinefmt "%%opt{lsp_modeline_progress}%%opt{lsp_modeline_message_requests}{StatusLineWarning}%%opt{lsp_diag_warnings}{StatusLineError}%%opt{lsp_diag_errors}{StatusLine} %opt{modelinefmt}"
-	}
 	# Helix's gutter mark, coloured by severity
 	set-option global lsp_diagnostic_line_error_sign   '●'
 	set-option global lsp_diagnostic_line_warning_sign '●'
@@ -680,7 +765,8 @@ hook -group kakrc global BufSetOption lsp_inlay_diagnostics=.* %{
 		w=$kak_opt_lsp_diagnostic_warning_count e=$kak_opt_lsp_diagnostic_error_count
 		[ "${w:-0}" -gt 0 ] && w=" ● $w" || w=
 		[ "${e:-0}" -gt 0 ] && e=" ● $e" || e=
-		printf '%s\n' "set-option buffer lsp_diag_warnings '$w'; set-option buffer lsp_diag_errors '$e'"
+		s=; [ -n "$w$e" ] && s=' │'
+		printf '%s\n' "set-option buffer lsp_diag_warnings '$w'; set-option buffer lsp_diag_errors '$e'; set-option buffer lsp_diag_sep '$s'"
 		double() {
 			r= rest=$2
 			while :; do
@@ -1217,7 +1303,29 @@ define-command -override -hidden git-gutter-locate %{
 			[ -n "$d" ] || break
 			d=${d%/*}
 		done
-		printf "set-option buffer workspace_root '%s'\n" "$(printf %s "$ws" | sed "s/'/''/g")"
+		rel=$kak_bufname
+		case $kak_buffile in "$ws"/*) rel=${kak_buffile#"$ws"/} ;; esac
+		printf "set-option buffer workspace_root '%s'; set-option buffer workspace_bufname '%s'\n" \
+			"$(printf %s "$ws" | sed "s/'/''/g")" "$(printf %s "$rel" | sed "s/'/''/g")"
+		# the status line's git part, for the workspace (no index refresh:
+		# --no-optional-locks keeps git commands run meanwhile from failing
+		# on its lock)
+		(
+			git -C "$ws" --no-optional-locks status --porcelain=v2 --branch 2>/dev/null |
+				LC_ALL=C awk -v ws="$ws" '
+				function q(t) { gsub(/\047/, "\047\047", t); return "\047" t "\047" }
+				/^# branch\.oid / { oid = substr($3, 1, 7) }
+				/^# branch\.head / { head = $3 }
+				/^[12] / { if (substr($2, 1, 1) != ".") s++; if (substr($2, 2, 1) != ".") m++ }
+				/^u / { m++ }
+				/^\? / { u++ }
+				END {
+					if (head == "") exit
+					if (head == "(detached)") head = oid
+					printf "git-status-set %s %s %s %s %s\n", q(ws), q(" ⎇ " head), \
+						q(s ? " +" s : ""), q(m ? " ~" m : ""), q(u ? " ?" u : "")
+				}' | kak -p "$kak_session"
+		) >/dev/null 2>&1 </dev/null &
 		root=
 		case $kak_buffile in
 		/*) root=$(git -C "${kak_buffile%/*}" rev-parse --show-toplevel 2>/dev/null) ;;
