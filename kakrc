@@ -1517,7 +1517,8 @@ define-command -override -hidden git-gutter-on-yes nop
 # nearest first), which mostly comes to the same directory.
 declare-option -hidden str workspace_root
 
-# The session's temp dir (made on first use, removed when it ends) holds
+# The session's temp dir (made on first use, removed when it ends, or by the
+# next session if it ended without saying so) holds
 # each run's copy of the buffer, at the buffer's prefix (a number per
 # locate) and the run's: runs can overlap.
 declare-option -hidden str git_gutter_dir
@@ -1561,7 +1562,14 @@ define-command -override -hidden git-gutter-locate %{
 		dir=$kak_opt_git_gutter_dir
 		case $kak_buffile in /*)
 			if [ -z "$dir" ] || [ ! -d "$dir" ]; then
-				dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-git-gutter.XXXXXX") &&
+				# (named after the server's pid: those of sessions that
+				# ended without KakEnd, their terminal closed say, go now)
+				for d in "${TMPDIR:-/tmp}"/kak-git-gutter.*.*; do
+					p=${d#"${TMPDIR:-/tmp}"/kak-git-gutter.} p=${p%%.*}
+					case $p in ''|*[!0-9]*) continue ;; esac
+					kill -0 "$p" 2>/dev/null || rm -rf -- "$d"
+				done
+				dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-git-gutter.$PPID.XXXXXX") &&
 					{ kq "$dir"; echo "set-option global git_gutter_dir $r"; }
 			fi ;;
 		esac
