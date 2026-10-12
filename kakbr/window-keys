@@ -1,0 +1,16 @@
+#!/bin/sh
+# kakbr's <c-w> in broot, in a popup over broot's pane (kakbr.conf, which
+# sizes it to this legend): shows the keys, reads one and does what it says.
+# Any other key (<esc> too) closes it, dropped, as with kak's own <c-w>.
+printf '\033[?25l l,<right>: focus kak\n w:         next pane\n q:         quit all'
+stty raw -echo
+k=$(dd bs=16 count=1 2>/dev/null)
+e=$(printf '\033')
+case $k in
+l | "$e[C" | "${e}OC") tmux select-pane -R ;;
+w) tmux select-pane -t :.+ ;;
+# kak ends its session (:kill, as :qa), which refuses while buffers are
+# unsaved (kak, focused, shows why); its ending closes the rest
+q) tmux select-pane -R \; run-shell -b "echo 'run-in-focused-client kill' | kak -p '#{session_name}'" ;;
+esac
+exit 0

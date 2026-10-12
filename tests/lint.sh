@@ -9,7 +9,7 @@ st=0
 bad() { echo "FAIL $*"; st=1; }
 
 echo "== sh -n"
-files=$(cd "$ROOT" && ls bin/* scripts/* tests/run.sh tests/lint.sh tests/perf-diff.sh tests/lib/*.sh tests/lib/shwrap tests/lib/shtime tests/lib/fakebin/tmux tests/*/*.sh)
+files=$(cd "$ROOT" && ls bin/* scripts/* kakbr/window-keys tests/run.sh tests/lint.sh tests/perf-diff.sh tests/lib/*.sh tests/lib/shwrap tests/lib/shtime tests/lib/fakebin/tmux tests/*/*.sh)
 for f in $files; do
 	case $(head -1 "$ROOT/$f") in *bash*) sh=bash ;; *) sh=sh ;; esac
 	$sh -n "$ROOT/$f" || bad "$sh -n $f"
