@@ -160,3 +160,5 @@ set-face global MatchingChar       "%opt{blue},%opt{gray}+b"
 set-face global BufferPadding      "%opt{linenr},%opt{black}"
 set-face global Whitespace         "%opt{gray}+f"
 set-face global WrapMarker         Whitespace
+set-face global IndentGuide        "%opt{gray}"
+set-face global IndentGuideActive  "%opt{lgray}"

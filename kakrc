@@ -124,6 +124,8 @@ set-face global StatusLineWarning yellow
 set-face global GitGutterAdd green
 set-face global GitGutterModify yellow
 set-face global GitGutterDelete red
+set-face global IndentGuide Whitespace
+set-face global IndentGuideActive +d@Default
 }
 evaluate-commands %opt{plugin_faces}
 evaluate-commands %opt{kakrc_faces}
@@ -211,11 +213,12 @@ hook -group kakrc global FocusOut .* %{
 	}
 }
 
-# indent-guides.render = true: no indent guides. Tabs are drawn as a bar
-# instead, which gives much the same picture where indentation is tabs (C,
-# C++, sh, markdown: see languages.toml below); indentation in spaces gets
-# no guides.
-add-highlighter -override global/ show-whitespaces -tab '│' -tabpad ' ' -spc ' ' -lf ' ' -nbsp '⍽'
+# indent-guides.render = true: see indent guides below (neither tabs nor
+# show-whitespaces' own unscoped guides are drawn here). Named, so a change
+# replaces it; the unnamed one an earlier kakrc added (tabs drawn as │)
+# goes on reload.
+try %{ remove-highlighter "global/show-whitespaces_-tab_│_-tabpad_ _-spc_ _-lf_ _-nbsp_⍽" }
+add-highlighter -override global/whitespace show-whitespaces -tab ' ' -tabpad ' ' -spc ' ' -lf ' ' -nbsp '⍽' -indent ''
 
 # soft-wrap.enable = true
 add-highlighter -override global/ wrap -word -indent
@@ -2115,6 +2118,147 @@ hook -group kakrc global InsertDelete \{ %[ try %[ autopairs-close '}' ] ]
 hook -group kakrc global InsertDelete '"' %{ try %{ autopairs-close '"' } }
 hook -group kakrc global InsertDelete "'" %{ try %{ autopairs-close "'" } }
 hook -group kakrc global InsertDelete `   %{ try %{ autopairs-close ` } }
+
+# --- indent guides -------------------------------------------------------------
+# indent-guides.render = true, scoped: guides (IndentGuide) only in the
+# top-level definition the cursor is in, the innermost block around it
+# brighter (IndentGuideActive), none elsewhere; in buffers without a grammar,
+# dim guides everywhere. The scopes come from indentation, not the syntax
+# tree (kak-tree-sitter only answers later, a request at a time): a
+# definition is the run of indented (or blank) lines between two lines at
+# column 1, with its header line(s) and closing bracket; a block, the lines
+# around the cursor indented at least as deep as its own line. Blank lines
+# get the guides of the shallower of their neighbours, drawn after them.
+# For the visible lines only, in one shell, whenever keys stop and the
+# buffer, the view, the indentation options or the cursor's block changed
+# (compared without a shell). Tabs and spaces alike: a guide every
+# indentwidth columns (tabstop for tabs, indentwidth 0).
+declare-option -hidden range-specs indent_guides
+declare-option -hidden str-list indent_guides_cache
+declare-option -hidden str-list indent_guides_cmp
+declare-option -hidden int indent_guides_cursor
+add-highlighter -override global/indent-guides replace-ranges indent_guides
+define-command -override -hidden -params 0 indent-guides-none nop
+define-command -override -hidden indent-guides-idle %{
+	try %{
+		ts-has-tree
+		set-option window indent_guides_cmp m1
+	} catch %{
+		set-option window indent_guides_cmp m0
+	}
+	set-option -add window indent_guides_cmp "t%val{timestamp}" "r%val{window_range}" "w%opt{indentwidth}.%opt{tabstop}" "l%val{cursor_line}"
+	set-option -remove window indent_guides_cmp %opt{indent_guides_cache}
+	try %{
+		evaluate-commands -verbatim indent-guides-none %opt{indent_guides_cmp}
+	} catch %{
+		indent-guides-render
+	}
+}
+hook -group kakrc global NormalIdle .* indent-guides-idle
+hook -group kakrc global InsertIdle .* indent-guides-idle
+hook -group kakrc global WinResize .* indent-guides-idle
+
+# the visible lines and 30 more each side (for the scopes around them)
+define-command -override -hidden indent-guides-render %{
+	set-option window indent_guides_cursor %val{cursor_line}
+	try %{
+		ts-has-tree
+		set-option window indent_guides_cache m1
+	} catch %{
+		set-option window indent_guides_cache m0
+	}
+	evaluate-commands -draft %{
+		execute-keys 'gb30J<a-;>Gt30Kx'
+		evaluate-commands %sh{
+			first=${kak_selection_desc%%.*} last=${kak_selection_desc#*,}; last=${last%%.*}
+			[ "$first" -le "$last" ] || { t=$first; first=$last; last=$t; }
+			set -- $kak_window_range
+			top=$(($1 + 1)) bot=$(($1 + $3))
+			unit=$kak_opt_indentwidth; [ "$unit" -gt 0 ] || unit=$kak_opt_tabstop
+			case $kak_opt_indent_guides_cache in *m1*) scoped=1 ;; *) scoped=0 ;; esac
+			printf '%s' "$kak_selection" | awk -v first="$first" -v top="$top" -v bot="$bot" \
+				-v cur="$kak_opt_indent_guides_cursor" -v unit="$unit" -v ts="$kak_opt_tabstop" \
+				-v scoped="$scoped" -v stamp="$kak_timestamp" -v range="$kak_window_range" \
+				-v widths="$kak_opt_indentwidth.$kak_opt_tabstop" '
+			{
+				l = first + NR - 1; last = l; text[l] = $0
+				match($0, /^[ \t]*/); lead[l] = substr($0, 1, RLENGTH)
+				c = 0
+				for (i = 1; i <= RLENGTH; i++)
+					c += substr(lead[l], i, 1) == "\t" ? ts - c % ts : 1
+				width[l] = c
+				blank[l] = $0 ~ /^[ \t]*$/
+			}
+			END {
+				# blank lines: the shallower neighbour
+				p = 0
+				for (l = first; l <= last; l++) { if (!blank[l]) p = width[l]; up[l] = p }
+				p = 0
+				for (l = last; l >= first; l--) {
+					if (!blank[l]) { p = width[l]; eff[l] = p } else eff[l] = (up[l] < p ? up[l] : p)
+				}
+				rs = 0; re = -1; act = -1
+				if (!scoped) { rs = first; re = last }
+				else if (eff[cur] > 0) { rs = re = cur }
+				else if (!blank[cur]) {
+					# a header (and opening bracket lines), or a closing bracket
+					s = text[cur]
+					if (s ~ /^[\])\175]/) { if (eff[cur - 1] > 0) rs = re = cur - 1 }
+					else {
+						n = cur + 1
+						while (n <= last && !blank[n] && eff[n] == 0 && text[n] ~ /^[[(\173][ \t]*$/) n++
+						if (n <= last && eff[n] > 0) rs = re = n
+					}
+				}
+				if (scoped && rs > 0) {
+					while (rs > first && eff[rs - 1] > 0) rs--
+					while (re < last && eff[re + 1] > 0) re++
+					# the innermost block: around the cursor, at least as deep
+					if (eff[cur] > 0) {
+						D = eff[cur]; act = int((D - 1) / unit) * unit
+						as = ae = cur
+						while (as > rs && eff[as - 1] >= D) as--
+						while (ae < re && eff[ae + 1] >= D) ae++
+					}
+				}
+				out = ""
+				for (l = (rs > top ? rs : top); l <= re && l <= bot; l++) {
+					E = eff[l]; if (E <= 0) continue
+					on = act >= 0 && l >= as && l <= ae
+					# over the leading whitespace, a character at a time
+					c = 0; n = length(lead[l])
+					for (i = 1; i <= n; i++) {
+						w = substr(lead[l], i, 1) == "\t" ? ts - c % ts : 1
+						m = ""; hit = 0
+						for (k = c; k < c + w; k++) {
+							if (k < E && k % unit == 0) { m = m "{" (on && k == act ? "IndentGuideActive" : "IndentGuide") "}│"; hit = 1 }
+							else m = m (hit ? "{Default} " : " ")
+						}
+						if (hit) out = out " '\''" l "." i "," l "." i "|" m "'\''"
+						c += w
+					}
+					# a blank line short of its guides: the rest after it
+					if (blank[l] && c < E) {
+						m = ""; pad = ""
+						for (k = c; k < E; k++) {
+							if (k % unit == 0) { m = m pad "{" (on && k == act ? "IndentGuideActive" : "IndentGuide") "}│"; pad = "" }
+							else pad = pad " "
+						}
+						if (m != "") out = out " '\''" l "." (n + 1) "+0|{Default}" m "'\''"
+					}
+				}
+				print "set-option window indent_guides " stamp out
+				# what the result depends on: the cursor anywhere in its block
+				# (at the same depth), or anywhere, unscoped
+				key = " '\''t" stamp "'\'' '\''r" range "'\'' '\''w" widths "'\''"
+				if (!scoped) for (l = first; l <= last; l++) key = key " l" l
+				else if (act >= 0) { for (l = as; l <= ae; l++) if (eff[l] == D) key = key " l" l }
+				else key = key " l" cur
+				print "set-option -add window indent_guides_cache" key
+			}'
+		}
+	}
+}
 
 # --- bufferline (tmux) --------------------------------------------------------
 # Kakoune can't draw a bufferline itself, so each client publishes its buffer
