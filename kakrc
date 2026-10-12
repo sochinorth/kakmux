@@ -130,6 +130,7 @@ set-face global StatusLineGit StatusLineInfo
 set-face global StatusLineGitAdded green
 set-face global StatusLineGitModified yellow
 set-face global StatusLineGitUntracked StatusLine
+set-face global JumpLabel +b@Error
 set-face global GitGutterAdd green
 set-face global GitGutterModify yellow
 set-face global GitGutterDelete red
@@ -2086,6 +2087,126 @@ define-command -override command-palette -docstring 'run any command or mapping,
 	}
 }
 map global user ? ':command-palette<ret>' -docstring 'command palette'
+
+# --- jump labels (<ret>) --------------------------------------------------------
+# Helix's gw, on one key: <ret> labels every word on screen (two characters
+# or more) with two letters, drawn over its first two, the nearest ones
+# (after the cursor, before it, in turn) getting the first labels: aa, ab,
+# ... az, ba ... Typing a label selects that word (and saves the selection
+# before on the jump list); <s-ret> extends the main selection to it
+# instead. Any other key cancels. Buffers whose <ret> does something of its
+# own keep it: those that map it (kak-lsp's lists, diff, man, doc, git)
+# outrank this global mapping, and grep and make, which watch for the key
+# (a NormalKey hook, which a mapping hides), get it passed on. One shell
+# works out the labels, one finds the word picked; the first key typed only
+# narrows the labels down (an option per first letter).
+declare-option -hidden range-specs jump_labels
+declare-option -hidden str-list jump_targets
+declare-option -hidden str jump_first
+declare-option -hidden str jump_extend
+declare-option -hidden str-list jump_descs
+declare-option -hidden range-specs jump_labels_a; declare-option -hidden range-specs jump_labels_b
+declare-option -hidden range-specs jump_labels_c; declare-option -hidden range-specs jump_labels_d
+declare-option -hidden range-specs jump_labels_e; declare-option -hidden range-specs jump_labels_f
+declare-option -hidden range-specs jump_labels_g; declare-option -hidden range-specs jump_labels_h
+declare-option -hidden range-specs jump_labels_i; declare-option -hidden range-specs jump_labels_j
+declare-option -hidden range-specs jump_labels_k; declare-option -hidden range-specs jump_labels_l
+declare-option -hidden range-specs jump_labels_m; declare-option -hidden range-specs jump_labels_n
+declare-option -hidden range-specs jump_labels_o; declare-option -hidden range-specs jump_labels_p
+declare-option -hidden range-specs jump_labels_q; declare-option -hidden range-specs jump_labels_r
+declare-option -hidden range-specs jump_labels_s; declare-option -hidden range-specs jump_labels_t
+declare-option -hidden range-specs jump_labels_u; declare-option -hidden range-specs jump_labels_v
+declare-option -hidden range-specs jump_labels_w; declare-option -hidden range-specs jump_labels_x
+declare-option -hidden range-specs jump_labels_y; declare-option -hidden range-specs jump_labels_z
+add-highlighter -override global/jump-labels replace-ranges jump_labels
+
+define-command -override -hidden jump-labels-native-grep %{ execute-keys -with-hooks <ret> }
+define-command -override -hidden jump-labels-native-make %{ execute-keys -with-hooks <ret> }
+define-command -override -hidden -params ..1 jump-labels %{
+	try %{
+		evaluate-commands "jump-labels-native-%opt{filetype}"
+	} catch %{
+		set-option window jump_extend %arg{1}
+		evaluate-commands -draft %{
+			execute-keys gtGbx
+			try %{
+				execute-keys 's\b\w\w<ret>'
+				set-option window jump_descs %val{selections_desc}
+			} catch %{ set-option window jump_descs }
+		}
+		evaluate-commands %sh{
+			eval set -- $kak_quoted_opt_jump_descs
+			[ $# -gt 0 ] || { echo "fail 'jump: no words on screen'"; exit; }
+			printf '%s\n' "$@" | LC_ALL=C awk -v cl="$kak_cursor_line" -v cc="$kak_cursor_column" '
+			BEGIN { abc = "abcdefghijklmnopqrstuvwxyz" }
+			{
+				split($0, r, /[.,]/); l = r[1] + 0; c = r[2] + 0
+				if (l > cl || (l == cl && c > cc)) F[++nf] = $0; else Bk[++nb] = $0
+			}
+			END {
+				# after the cursor, nearest first, then before it, in turn
+				n = 0; i = 1; j = nb
+				while ((i <= nf || j >= 1) && n < 676) {
+					if (i <= nf) W[n++] = F[i++]
+					if (j >= 1 && n < 676) W[n++] = Bk[j--]
+				}
+				all = ""
+				for (k = 0; k < n; k++) {
+					lab = substr(abc, int(k / 26) + 1, 1) substr(abc, k % 26 + 1, 1)
+					split(W[k], r, ","); spec = " \047" W[k] "|{JumpLabel}" lab "\047"
+					all = all spec; ONE[substr(lab, 1, 1)] = ONE[substr(lab, 1, 1)] spec
+					tg = tg " \047" lab "=" r[1] "\047"
+				}
+				print "set-option window jump_labels %val{timestamp}" all
+				for (k = 1; k <= 26; k++) {
+					f = substr(abc, k, 1)
+					print "set-option window jump_labels_" f " %val{timestamp}" ONE[f]
+				}
+				print "set-option window jump_targets" tg
+				print "on-key -mode-name jump %{ jump-labels-first %val{key} }"
+			}'
+		}
+	}
+}
+define-command -override -hidden -params 1 jump-labels-first %{
+	try %{
+		evaluate-commands "set-option window jump_labels %%opt{jump_labels_%arg{1}}"
+		set-option window jump_first %arg{1}
+		on-key -mode-name jump %{ jump-labels-go %val{key} }
+	} catch %{
+		jump-labels-clear
+	}
+}
+define-command -override -hidden -params 1 jump-labels-go %{
+	set-option window jump_labels %val{timestamp}
+	evaluate-commands %sh{
+		want="$kak_opt_jump_first$1="
+		eval set -- $kak_quoted_opt_jump_targets
+		for t; do
+			case $t in "$want"*) ;; *) continue ;; esac
+			to=${t#"$want"}
+			if [ -z "$kak_opt_jump_extend" ]; then
+				echo "execute-keys <c-s>; select $to,$to; execute-keys <a-i>w"; exit
+			fi
+			# extend: from the main selection's anchor; past it, to the word's end
+			a=${kak_selection_desc%%,*}
+			al=${a%.*} ac=${a#*.} tl=${to%.*} tc=${to#*.}
+			if [ "$tl" -gt "$al" ] || { [ "$tl" -eq "$al" ] && [ "$tc" -gt "$ac" ]; }; then
+				echo "execute-keys <c-s>; select $a,$to; execute-keys E"
+			else
+				echo "execute-keys <c-s>; select $a,$to"
+			fi
+			exit
+		done
+	}
+	set-option window jump_targets
+}
+define-command -override -hidden jump-labels-clear %{
+	set-option window jump_labels %val{timestamp}
+	set-option window jump_targets
+}
+map global normal <ret>   ': jump-labels<ret>'         -docstring 'jump to a word (labels)'
+map global normal <s-ret> ': jump-labels -extend<ret>' -docstring 'extend to a word (labels)'
 
 # --- splits (tmux) ------------------------------------------------------------
 # A split is a tmux pane running another client of this session, so all

@@ -163,6 +163,9 @@ set-face global BufferLineInactive "%opt{lgray},%opt{lblack}"
 set-face global StatusCursor       "%opt{black},%opt{white}"
 set-face global Prompt             "%opt{blue}"
 set-face global MatchingChar       "%opt{blue},%opt{gray}+b"
+# jump labels (<ret>); Helix's onedark has them light gray, which is lost
+# among the comments: red, bold
+set-face global JumpLabel          "%opt{red}+b"
 set-face global BufferPadding      "%opt{linenr},%opt{black}"
 set-face global Whitespace         "%opt{gray}+f"
 set-face global WrapMarker         Whitespace
