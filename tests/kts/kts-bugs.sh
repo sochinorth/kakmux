@@ -1,5 +1,5 @@
-# kts-bugs: kak-tree-sitter 3.2.2's server bugs, fixed in the patched build
-# (sochinorth repo, 3.2.2-3): (1) a request processed twice when its client
+# kts-bugs: kak-tree-sitter 3.2.2's server bugs, fixed in a patched build
+# (3.2.2-3): (1) a request processed twice when its client
 # half-closes, and a socket fd kept per request; (2) a node ending after a
 # newline reported at column 0 (parent of 1.2 -> 1.1,2.1 instead of 1.1,1.8);
 # (3) a session that quits before its init answer stays tracked, so the next

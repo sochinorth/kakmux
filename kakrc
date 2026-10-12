@@ -1,4 +1,4 @@
-# Port of dotfiles/config/helix/{config,languages}.toml. Lines that don't carry over
+# Port of Helix's config.toml and languages.toml. Lines that don't carry over
 # are kept as comments saying why.
 
 # Sourcing this again in a running session (:config-reload, Helix's, at the

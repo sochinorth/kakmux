@@ -27,16 +27,14 @@ there; the tests build a private copy with the paths pointed at it.
 
 ## Deployment
 
-It lives in the dotfiles repo as a git submodule at `dotfiles/config/kak`, and
-mise's `[dotfiles]` symlinks each file above into place (so editing the
-submodule's checkout edits the live config). Clone the dotfiles with
-`--recurse-submodules`; mise's bootstrap runs `git submodule update --init`
-for an existing clone.
+It can live in a dotfiles repo as a git submodule, with each file above
+symlinked into place by whatever deploys the dotfiles (so editing the
+submodule's checkout edits the live config).
 
-Standalone, without the dotfiles:
+Standalone:
 
 ```sh
-git clone git@github.com:sochinorth/kakmux.git ~/kakmux
+git clone https://github.com/sochinorth/kakmux.git ~/kakmux
 ln -s ~/kakmux ~/.config/kak                     # kakrc, colors/, bin/, kakmux.conf in place
 ln -s ~/kakmux/kakbr ~/.config/kakbr
 mkdir -p ~/.local/bin ~/.local/lib/broot-opener
@@ -55,6 +53,6 @@ highlighter.
 
 Known upstream issues (not this config's): kak-tree-sitter 3.2.2 has three
 server bugs (duplicate answers, column-0 node ends, sessions stuck as tracked),
-fixed in the patched package the dotfiles install (`tests/kts`); with it, its
+fixed in a patched build, 3.2.2-3 (`tests/kts` checks for them); with it, its
 rc removes Kakoune's `window/<lang>` highlighter itself, so the stock c-family
 hook's own removal logs an error in `*debug*` when a buffer's filetype changes.
