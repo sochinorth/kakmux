@@ -382,16 +382,16 @@ try %{
 	set-option global lsp_diagnostic_line_warning_sign '●'
 	set-option global lsp_diagnostic_line_info_sign    '●'
 	set-option global lsp_diagnostic_line_hint_sign    '●'
-	# Helix's keys: g d/D/y/r/i, ]d [d, <space> k/r/a/h (and s/S/d/D: pickers)
+	# Helix's keys: g d/D/y/r/i, ]d [d (see [ ] below), <space> k/r/a/h (and
+	# s/S/d/D: pickers). gi is Kakoune's first non-blank, which moves to gs
+	# (see goto mode below).
 	map global goto d '<esc>:lsp-definition<ret>'      -docstring 'definition (LSP)'
 	map global goto D '<esc>:lsp-declaration<ret>'     -docstring 'declaration (LSP)'
 	map global goto y '<esc>:lsp-type-definition<ret>' -docstring 'type definition (LSP)'
 	map global goto r '<esc>:lsp-references<ret>'      -docstring 'references (LSP)'
-	# gi is Kakoune's first non-blank; in Helix that's gs (which can't
-	# extend here: G s moves like g s)
 	map global goto i '<esc>:lsp-implementation<ret>'  -docstring 'implementation (LSP)'
-	map global goto s '<esc>:execute-keys gi<ret>'     -docstring 'line begin (non-blank)'
-	# ]d [d: to the next/previous diagnostic, as an object
+	# a diagnostic as an object: ]]d [[d select to the next/previous one,
+	# shift-] shift-[ d extend to it (]d [d jump: see [ and ] below)
 	map global object d '<a-;>lsp-diagnostic-object error warning info hint<ret>' -docstring 'diagnostic (LSP)'
 	map global user k ':lsp-hover<ret>'                -docstring 'hover (LSP)'
 	map global user r ':lsp-rename-prompt<ret>'        -docstring 'rename (LSP)'
@@ -1527,6 +1527,37 @@ map global insert <c-right> '<a-;>w<a-;>l'
 map global insert <c-left>  '<a-;>b<a-;>;'
 map global insert <s-right> '<a-;>L'
 map global insert <s-left>  '<a-;>H'
+
+# --- goto mode (g) -------------------------------------------------------------
+# Kakoune's g, with Helix's letters where they differ: gs the first non-blank
+# (Kakoune's gi; gi is LSP's implementation, above), ge the last line
+# (Kakoune's gj; its ge, the buffer's very end, is now ge then gl), gk/gj a
+# line up/down (Kakoune's gk was gg, its gj is ge), g| a column (prompted).
+# Mapped to Kakoune's own goto keys where there's one, so G extends with
+# them too. gf with nothing selected (one character) opens the path under
+# the cursor, as Helix's does.
+map global goto s i                   -docstring 'line start (non-blank)'
+map global goto e j                   -docstring 'last line'
+map global goto k '<esc>k'            -docstring 'line up'
+map global goto j '<esc>j'            -docstring 'line down'
+map global goto | '<esc>:goto-column<ret>' -docstring 'column'
+map global goto f '<esc>:goto-file<ret>'   -docstring 'file under cursor (or selected)'
+define-command -override -hidden goto-column %{
+	prompt column: %{
+		evaluate-commands -itersel %{
+			try %{ select "%val{cursor_line}.%val{text},%val{cursor_line}.%val{text}" } catch %{ execute-keys gl }
+		}
+	}
+}
+# the path around the cursor: between the nearest characters on each side
+# that can't be in one (spaces, quotes, brackets, : of file:line, ...)
+define-command -override -hidden goto-file %{
+	try %{
+		execute-keys '<a-k>\A.\z<ret>'
+		execute-keys '<a-i>c[^\w./~+@%-],[^\w./~+@%-]<ret>'
+	}
+	execute-keys gf
+}
 
 # --- bufferline (tmux) --------------------------------------------------------
 # Kakoune can't draw a bufferline itself, so each client publishes its buffer
