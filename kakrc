@@ -13,6 +13,15 @@ declare-option -hidden bool kakrc_loaded
 remove-hooks global kakrc(-.*)?
 # the first time only: evaluate-commands "kakrc-first-%opt{kakrc_loaded}"
 define-command -override -hidden kakrc-first-false nop
+# each-client COMMAND CLIENT...: COMMAND in each CLIENT, one at a time
+# (without a shell: the rest, less the first, again)
+declare-option -hidden str-list each_client_rest
+define-command -override -hidden -params 2.. each-client %{
+	evaluate-commands -client %arg{2} %arg{1}
+	set-option global each_client_rest %arg{@}
+	set-option -remove global each_client_rest %arg{1} %arg{2}
+	try %{ evaluate-commands -verbatim each-client %arg{1} %opt{each_client_rest} }
+}
 
 # --- tree-sitter, LSP --------------------------------------------------------
 # Helix's built-ins, here kak-tree-sitter (highlighting, text objects) and
@@ -751,13 +760,18 @@ define-command -override -hidden lsp-execute-command-request -params 3..4 %{
 # wrap those (flag-lines -after): one longer than the room left, as after a
 # soft-wrapped line, is cut at the window's edge. Leaving them out on lines
 # that wrap would need each line's width on screen, so they stay.
+# This runs as kak-lsp publishes (each pause in typing) and as the cursor
+# changes line, so it's kept to a shell per list caught (and drawn in the
+# same go) and per move onto a line with diagnostics; publishes with none,
+# and moves onto lines without, need none.
 
 declare-option -docstring 'severities shown below the cursor''s line' \
 	str-list inline_diagnostics_severities error warning
 # buffer: "line|column|severity|message" (byte column, as Kakoune counts),
-# and whether that's behind kak-lsp's (stale, or '')
+# their lines, and whether that's behind kak-lsp's (stale, or '')
 declare-option -hidden str-list line_diags
 declare-option -hidden int line_diags_n 0
+declare-option -hidden str-list line_diags_lines
 declare-option -hidden str line_diags_state
 # window: what's drawn, whether lines below are, for which cursor line
 declare-option -hidden range-specs line_diags_view
@@ -769,8 +783,305 @@ declare-option -hidden int line_diags_seen 0
 declare-option -hidden str-list line_diags_pending
 declare-option -hidden str-list line_diags_dcols
 declare-option -hidden int line_diags_eolcol
+# window: the cursor's line, and what the drawing was for (size, git gutter
+# column, line count: see WinResize below)
+declare-option -hidden str line_diags_text
+declare-option -hidden str line_diags_size
+declare-option -hidden str-list line_diags_cmp
 add-highlighter -override global/line-diags replace-ranges line_diags_view
 add-highlighter -override global/line-diags-eol flag-lines -after Default line_diags_eol
+
+# The shell side, in functions the scripts below share (each script names
+# the kak_ values these read, so Kakoune passes them: it only passes those
+# a script mentions).
+declare-option -hidden str line_diags_sh %{
+	# double C S: S with each C doubled, in $r (all in the shell, no
+	# other processes)
+	double() {
+		r= rest=$2
+		while :; do
+			case $rest in
+			*"$1"*) r="$r${rest%%"$1"*}$1$1" rest=${rest#*"$1"} ;;
+			*) r=$r$rest; return ;;
+			esac
+		done
+	}
+	# subst FROM TO S: S with each FROM replaced by TO, in $r
+	subst() {
+		r= rest=$3
+		while :; do
+			case $rest in
+			*"$1"*) r="$r${rest%%"$1"*}$2" rest=${rest#*"$1"} ;;
+			*) r=$r$rest; return ;;
+			esac
+		done
+	}
+
+	# capture ROOT LIST: keep this file's lines of the list, which read
+	# `path:line:column: [severity][...] message` (path from ROOT on), as
+	# line_diags (and in $diags, shell-quoted as $kak_quoted_ values are)
+	# and the lines they're on
+	capture() {
+		rel=${kak_buffile#"$1"/}
+		out= diags= n=0 lines=' '
+		while IFS= read -r l; do
+			case $l in
+			"$rel:"*) l=${l#"$rel:"} ;;
+			"$kak_buffile:"*) l=${l#"$kak_buffile:"} ;;
+			*) continue ;;
+			esac
+			line=${l%%:*} l=${l#*:}
+			col=${l%%:*} l=${l#*: }
+			case $line$col in ''|*[!0-9]*) continue ;; esac
+			# [severity], then [server][source][code], none with spaces
+			case $l in '[error]'*|'[warning]'*|'[info]'*|'[hint]'*) ;; *) continue ;; esac
+			sev=${l#\[} sev=${sev%%]*}
+			while :; do
+				case $l in
+				'['*']'*) g=${l%%]*}; case $g in *' '*) break ;; esac; l=${l#*]} ;;
+				*) break ;;
+				esac
+			done
+			double "'" "$line|$col|$sev|${l# }"
+			out="$out '$r'" n=$((n + 1))
+			subst "'" "'\\''" "$line|$col|$sev|${l# }"
+			diags="$diags '$r'"
+			case $lines in *" $line "*) ;; *) lines="$lines$line " ;; esac
+		done <<-EOF
+			$2
+		EOF
+		echo "set-option buffer line_diags_state ''"
+		printf '%s\n' "set-option buffer line_diags $out"
+		echo "set-option buffer line_diags_n $n"
+		echo "set-option buffer line_diags_lines$lines"
+	}
+
+	# pick QUOTED: of the diagnostics (line_diags, quoted), the cursor
+	# line's of the severities shown, by column, descending: $n of them, in
+	# col_I and e_I ("column|severity|message")
+	pick() {
+		cur=$kak_cursor_line all=$1
+		eval set -- "$kak_quoted_opt_inline_diagnostics_severities"
+		show=" $* "
+		n=0
+		eval set -- "$all"
+		for e; do
+			[ "${e%%|*}" = "$cur" ] || continue
+			e=${e#*|} sev=${e#*|} sev=${sev%%|*}
+			case $show in *" $sev "*) ;; *) continue ;; esac
+			# insert by column, descending
+			i=$n
+			while [ "$i" -gt 0 ]; do
+				eval "pc=\$col_$((i - 1))"
+				[ "$pc" -lt "${e%%|*}" ] || break
+				eval "col_$i=\$pc e_$i=\$e_$((i - 1))"
+				i=$((i - 1))
+			done
+			eval "col_$i=\${e%%|*} e_$i=\$e"
+			n=$((n + 1))
+		done
+	}
+
+	# measure TEXT: the screen columns (from 1) of the picked ones on the
+	# cursor's line TEXT (newline included), into dcols, and of its end
+	# (the newline), into eolcol, as Kakoune counts them: tabs to the next
+	# tabstop, a column past the end at the end. Only for a line all ASCII
+	# and not too long (else fails: Kakoune measures, see render);
+	# lineend is where the lines below hang from.
+	measure() {
+		text=$1
+		[ "${#text}" -le 1000 ] || return 1
+		# (bytes, not characters, whatever the shell's locale)
+		lc=${LC_ALL-unset}; LC_ALL=C
+		case $text in *[![:print:]"$tab$nl"]*) ascii= ;; *) ascii=1 ;; esac
+		len=${#text}
+		if [ "$lc" = unset ]; then unset LC_ALL; else LC_ALL=$lc; fi
+		[ -n "$ascii" ] || return 1
+		lineend="$kak_cursor_line.$len"
+		ts=$kak_opt_tabstop
+		# the screen column at each byte column, up to the newline's
+		rest=$text i=1 w=0
+		while [ "$i" -le "$len" ]; do
+			eval "dc_$i=$((w + 1))"
+			ch=${rest%"${rest#?}"} rest=${rest#?}
+			if [ "$ch" = "$tab" ]; then w=$((w + ts - w % ts)); else w=$((w + 1)); fi
+			i=$((i + 1))
+		done
+		eval "eolcol=\$dc_$len"
+		dcols= i=0
+		while [ "$i" -lt "$n" ]; do
+			eval "c=\$col_$i"
+			if [ "$c" -lt 1 ]; then d=1
+			elif [ "$c" -gt "$len" ]; then d=$eolcol
+			else eval "d=\$dc_$c"; fi
+			dcols="$dcols $d"
+			i=$((i + 1))
+		done
+		echo "set-option window line_diags_dcols$dcols"
+		echo "set-option window line_diags_eolcol $eolcol"
+	}
+
+	# render QUOTED [TEXT]: draw for the cursor's line (TEXT, or Kakoune
+	# measures it: the commands for that, for a draft whose main selection
+	# is the cursor, then line-diags-draw; or with $redraft, just
+	# line-diags-render, which makes that draft)
+	render() {
+		pick "$1"
+		if [ "$n" -gt 0 ] && { [ $# -lt 2 ] || ! measure "$2"; }; then
+			# from a list caught: in a draft of its own
+			[ -n "$redraft" ] && { echo line-diags-render; return; }
+			echo 'set-option window line_diags_dcols'
+			i=0 args=
+			while [ "$i" -lt "$n" ]; do
+				eval "c=\$col_$i e=\$e_$i"
+				echo "try %{ select $cur.$c,$cur.$c; set-option -add window line_diags_dcols %val{cursor_display_column} } catch %{ set-option -add window line_diags_dcols 1 }"
+				double "'" "$e"; args="$args '$r'"
+				i=$((i + 1))
+			done
+			# the whole line: the lines below hang from its end (and its
+			# width says whether it wraps)
+			echo "select $cur.1,$cur.1; execute-keys x; set-option window line_diags_eolcol %val{cursor_display_column}"
+			printf '%s\n' "line-diags-draw$args"
+			return
+		fi
+		i=0; set --
+		while [ "$i" -lt "$n" ]; do eval "set -- \"\$@\" \"\$e_$i\""; i=$((i + 1)); done
+		draw "$@"
+	}
+
+	# draw COLUMN|SEVERITY|MESSAGE...: rightmost first, their screen
+	# columns in $dcols, the line's end's in $eolcol, its last position in
+	# $lineend
+	draw() {
+		# markup text (\ and the left brace escaped), then a range-specs
+		# element (\ and | escaped again), in $r. (The brace comes from
+		# printf: kak's parser counts the braces in this block.)
+		lb=$(printf '\173')
+		esc() {
+			subst '\' '\\\\' "$1"; subst "$lb" '\\'"$lb" "$r"; subst '|' '\|' "$r"
+		}
+		cur=$kak_cursor_line n=$#
+		i=0
+		for e; do
+			sev=${e#*|} sev=${sev%%|*}
+			case $sev in
+			error) f=InlayDiagnosticError ;; warning) f=InlayDiagnosticWarning ;;
+			info) f=InlayDiagnosticInfo ;; *) f=InlayDiagnosticHint ;;
+			esac
+			eval "f_$i=\$f m_$i=\${e#*|*|}"
+			i=$((i + 1))
+		done
+		i=0
+		for d in $dcols; do eval "p_$i=\$((d - 1))"; i=$((i + 1)); done
+
+		# the end-of-line messages, less this line's if it gets lines below
+		eval set -- "$kak_quoted_opt_lsp_inlay_diagnostics"
+		if [ $# -eq 0 ]; then
+			echo 'set-option window line_diags_eol %val{timestamp}'
+		else
+			eol="'$1'"; shift
+			for e; do
+				[ "$n" -gt 0 ] && [ "${e%%|*}" = "$cur" ] && continue
+				double "'" "$e"; eol="$eol '$r'"
+			done
+			printf '%s\n' "set-option window line_diags_eol $eol"
+		fi
+		if [ "$n" -eq 0 ]; then
+			echo 'set-option window line_diags_view %val{timestamp}'
+			echo 'set-option window line_diags_drawn 0'
+			return
+		fi
+
+		# blanks to column $2 with a │ at each diagnostic left of it still to
+		# come (after the $1-th), in $lead
+		blanks() { while [ "$1" -gt 0 ]; do lead="$lead "; set -- $(($1 - 1)); done; }
+		mklead() {
+			lead= at=0 j=$((n - 1))
+			while [ "$j" -gt "$1" ]; do
+				eval "pj=\$p_$j fj=\$f_$j"
+				if [ "$pj" -lt "$2" ] && [ "$pj" -ge "$at" ]; then
+					lead="$lead{Default}"; blanks $((pj - at))
+					lead="$lead{$fj}│"; at=$((pj + 1))
+				fi
+				j=$((j - 1))
+			done
+			lead="$lead{Default}"; blanks $(($2 - at))
+		}
+		# text width: the window less the gutter (diagnostic flags, line
+		# numbers, │, and the git gutter's column when its last diff found
+		# changes, see git_gutter_any) and
+		# the end-of-line mark show-whitespaces draws after each line (these
+		# included: a line any wider wraps)
+		digits=${#kak_buf_line_count}; [ "$digits" -ge 2 ] || digits=2
+		width=$((kak_window_width - digits - 3))
+		[ -n "$kak_opt_git_gutter_any" ] && width=$((width - 1))
+		# a line that wraps puts its columns elsewhere on screen, and one
+		# too far right leaves too little room (under 20 columns) right of
+		# it: then just the messages, from the left. No line drawn here may
+		# be wider than the window: Kakoune 2026.05.21 spins (or crashes)
+		# wrapping lines below wider than the window. One too narrow for
+		# even that gets none.
+		flat=
+		[ "$eolcol" -gt "$width" ] && flat=1
+		i=0
+		while [ "$i" -lt "$n" ]; do
+			eval "p=\$p_$i"; [ $((width - p - 2)) -ge 20 ] || flat=1
+			i=$((i + 1))
+		done
+		if [ -n "$flat" ]; then
+			i=0; while [ "$i" -lt "$n" ]; do eval "p_$i=0"; i=$((i + 1)); done
+		fi
+		if [ "$width" -lt 12 ]; then
+			echo 'set-option window line_diags_view %val{timestamp}'
+			echo 'set-option window line_diags_drawn 0'
+			return
+		fi
+		text= i=0
+		while [ "$i" -lt "$n" ]; do
+			eval "p=\$p_$i f=\$f_$i m=\$m_$i"
+			w=$((width - p - 2))
+			first=1
+			# word-wrapped to $w columns
+			while [ -n "$m" ]; do
+				chunk= rest=$m
+				while [ -n "$rest" ]; do
+					word=${rest%% *}
+					case $rest in *' '*) rest=${rest#* } ;; *) rest= ;; esac
+					# a word too long for a line: its first $w characters
+					if [ "${#word}" -gt "$w" ]; then
+						tail=$word head=
+						while [ "${#head}" -lt "$w" ]; do
+							head=$head${tail%"${tail#?}"} tail=${tail#?}
+						done
+						word=$head rest="$tail${rest:+ $rest}"
+					fi
+					if [ -z "$chunk" ]; then chunk=$word
+					elif [ $((${#chunk} + 1 + ${#word})) -le "$w" ]; then chunk="$chunk $word"
+					else rest="$word${rest:+ $rest}"; break
+					fi
+				done
+				m=$rest
+				mklead "$i" "$p"
+				esc "$chunk"
+				if [ -n "$first" ]; then
+					text="$text
+$lead{$f}└─$r"
+				else
+					text="$text
+$lead{Default}  {$f}$r"
+				fi
+				first=
+			done
+			i=$((i + 1))
+		done
+		double "'" "$lineend+0|$text"
+		printf "set-option window line_diags_view %%val{timestamp} '%s'\n" "$r"
+		echo 'set-option window line_diags_drawn 1'
+	}
+	nl='
+'
+	tab=$(printf '\t')
+}
 
 # Helix's status line diagnostics: a coloured ● and the count, warnings
 # then errors, each only when there are some. Set as kak-lsp publishes;
@@ -780,29 +1091,37 @@ declare-option -hidden str lsp_diag_errors
 
 # kak-lsp publishes into the buffer: the counts for the modeline, and the
 # list is due. Each client showing it asks for it now; one that shows it
-# later does then (WinDisplay, below).
+# later does then (WinDisplay, below). None at all, and none before either:
+# nothing to ask for. No shell: a no-op command for each count that's 0 (or
+# all of them), the clients one at a time.
+define-command -override -hidden line-diags-zero-0 nop
+define-command -override -hidden line-diags-zero-0-0 nop
+define-command -override -hidden line-diags-zero-0-0-0-0-0 nop
 hook -group kakrc global BufSetOption lsp_inlay_diagnostics=.* %{
-	set-option buffer line_diags_state stale
-	evaluate-commands %sh{
-		w=$kak_opt_lsp_diagnostic_warning_count e=$kak_opt_lsp_diagnostic_error_count
-		[ "${w:-0}" -gt 0 ] && w=" ● $w" || w=
-		[ "${e:-0}" -gt 0 ] && e=" ● $e" || e=
-		s=; [ -n "$w$e" ] && s=' │'
-		printf '%s\n' "set-option buffer lsp_diag_warnings '$w'; set-option buffer lsp_diag_errors '$e'; set-option buffer lsp_diag_sep '$s'"
-		double() {
-			r= rest=$2
-			while :; do
-				case $rest in
-				*"$1"*) r="$r${rest%%"$1"*}$1$1" rest=${rest#*"$1"} ;;
-				*) r=$r$rest; return ;;
-				esac
-			done
-		}
-		eval set -- "$kak_quoted_client_list"
-		for c; do
-			double "'" "$c"
-			printf "evaluate-commands -client '%s' line-diags-request\n" "$r"
-		done
+	try %{
+		evaluate-commands "line-diags-zero-%opt{lsp_diagnostic_warning_count}"
+		set-option buffer lsp_diag_warnings ''
+	} catch %{
+		set-option buffer lsp_diag_warnings " ● %opt{lsp_diagnostic_warning_count}"
+	}
+	try %{
+		evaluate-commands "line-diags-zero-%opt{lsp_diagnostic_error_count}"
+		set-option buffer lsp_diag_errors ''
+	} catch %{
+		set-option buffer lsp_diag_errors " ● %opt{lsp_diagnostic_error_count}"
+	}
+	try %{
+		evaluate-commands "line-diags-zero-%opt{lsp_diagnostic_warning_count}-%opt{lsp_diagnostic_error_count}"
+		set-option buffer lsp_diag_sep ''
+	} catch %{
+		set-option buffer lsp_diag_sep ' │'
+	}
+	try %{
+		evaluate-commands "line-diags-zero-%opt{lsp_diagnostic_error_count}-%opt{lsp_diagnostic_warning_count}-%opt{lsp_diagnostic_info_count}-%opt{lsp_diagnostic_hint_count}-%opt{line_diags_n}"
+		set-option buffer line_diags_state ''
+	} catch %{
+		set-option buffer line_diags_state stale
+		try %{ evaluate-commands -verbatim each-client line-diags-request %val{client_list} }
 	}
 }
 # in a client: ask for the list if its buffer's is stale (whichever buffer
@@ -833,23 +1152,21 @@ hook -group kakrc global ClientClose .* %{
 }
 
 # Where every kak-lsp list ends up (references, symbols, diagnostics, calls:
-# `path:line:column:text` lines): a list asked for above is caught, or
+# `path:line:column:text` lines): a list asked for above is caught, and
+# drawn from straight away (with the cursor's line, picked up first), or
 # dropped if this client has moved to another buffer since (that one stays
 # stale, so asks again when shown); one a workspace symbol picker asked for
 # goes to it; the rest open in a picker (with tmux; else in kak-lsp's
 # buffer, as before).
 define-command -override -hidden lsp-show-goto-buffer -params 4..5 %{
+	try %{ evaluate-commands -draft %{ execute-keys ',;x'; set-option window line_diags_text %val{selection} } }
 	evaluate-commands %sh{
-		double() {
-			r= rest=$2
-			while :; do
-				case $rest in
-				*"$1"*) r="$r${rest%%"$1"*}$1$1" rest=${rest#*"$1"} ;;
-				*) r=$r$rest; return ;;
-				esac
-			done
-		}
-		title=$1
+		# (read by line_diags_sh: kak_buffile kak_cursor_line kak_window_width
+		# kak_buf_line_count kak_opt_tabstop kak_opt_git_gutter_any
+		# kak_quoted_opt_lsp_inlay_diagnostics
+		# kak_quoted_opt_inline_diagnostics_severities)
+		eval "$kak_opt_line_diags_sh"
+		title=$1 root=$3 list=$4
 		if [ "$title" = '*diagnostics*' ] && [ -n "$kak_opt_line_diags_pending" ]; then
 			# take off one entry: this buffer's, else any of this client's
 			eval set -- "$kak_quoted_opt_line_diags_pending"
@@ -865,7 +1182,12 @@ define-command -override -hidden lsp-show-goto-buffer -params 4..5 %{
 					double "'" "$e"; keep="$keep '$r'"
 				done
 				printf '%s\n' "set-option global line_diags_pending$keep"
-				[ "$take" = "$mine" ] && echo 'line-diags-capture %arg{3} %arg{4}'
+				if [ "$take" = "$mine" ]; then
+					capture "$root" "$list"
+					echo 'set-option window line_diags_seen %val{cursor_line}'
+					redraft=1
+					render "$diags" "$kak_opt_line_diags_text"
+				fi
 				exit
 			fi
 		fi
@@ -910,257 +1232,48 @@ define-command -override -hidden -params 4..5 line-diags-goto-buffer %{
 	}
 }
 
-# line-diags-capture ROOT LIST: keep this file's lines of the list, which
-# read `path:line:column: [severity][...] message` (path from ROOT on)
-define-command -override -hidden -params 2 line-diags-capture %{
-	set-option buffer line_diags_state ''
-	evaluate-commands %sh{
-		double() {
-			r= rest=$2
-			while :; do
-				case $rest in
-				*"$1"*) r="$r${rest%%"$1"*}$1$1" rest=${rest#*"$1"} ;;
-				*) r=$r$rest; return ;;
-				esac
-			done
-		}
-		rel=${kak_buffile#"$1"/}
-		out= n=0
-		while IFS= read -r l; do
-			case $l in
-			"$rel:"*) l=${l#"$rel:"} ;;
-			"$kak_buffile:"*) l=${l#"$kak_buffile:"} ;;
-			*) continue ;;
-			esac
-			line=${l%%:*} l=${l#*:}
-			col=${l%%:*} l=${l#*: }
-			case $line$col in ''|*[!0-9]*) continue ;; esac
-			# [severity], then [server][source][code], none with spaces
-			case $l in '[error]'*|'[warning]'*|'[info]'*|'[hint]'*) ;; *) continue ;; esac
-			sev=${l#\[} sev=${sev%%]*}
-			while :; do
-				case $l in
-				'['*']'*) g=${l%%]*}; case $g in *' '*) break ;; esac; l=${l#*]} ;;
-				*) break ;;
-				esac
-			done
-			double "'" "$line|$col|$sev|${l# }"
-			out="$out '$r'" n=$((n + 1))
-		done <<-EOF
-			$2
-		EOF
-		printf '%s\n' "set-option buffer line_diags $out"
-		echo "set-option buffer line_diags_n $n"
-		echo 'line-diags-render'
-	}
-}
-
-# Draw for the cursor's line, in two steps: this one picks its diagnostics
-# (rightmost first) and has Kakoune measure where on screen each one's column
-# is (tabs, wide characters); line-diags-draw draws.
+# Draw for the cursor's line: its diagnostics (rightmost first) and where on
+# screen each one's column is (worked out in the shell for a line of plain
+# ASCII, tabs and all; else Kakoune measures, in a draft, and line-diags-draw
+# draws).
 define-command -override -hidden line-diags-render %{
 	set-option window line_diags_seen %val{cursor_line}
-	set-option window line_diags_dcols
-	evaluate-commands -draft %sh{
-		double() {
-			r= rest=$2
-			while :; do
-				case $rest in
-				*"$1"*) r="$r${rest%%"$1"*}$1$1" rest=${rest#*"$1"} ;;
-				*) r=$r$rest; return ;;
-				esac
-			done
+	evaluate-commands -draft %{
+		execute-keys ',;x'
+		evaluate-commands %sh{
+			# (read by line_diags_sh: kak_cursor_line kak_window_width
+			# kak_buf_line_count kak_opt_tabstop kak_opt_git_gutter_any
+			# kak_quoted_opt_lsp_inlay_diagnostics
+			# kak_quoted_opt_inline_diagnostics_severities)
+			eval "$kak_opt_line_diags_sh"
+			render "$kak_quoted_opt_line_diags" "$kak_selection"
 		}
-		cur=$kak_cursor_line
-		eval set -- "$kak_quoted_opt_inline_diagnostics_severities"
-		show=" $* "
-		# this line's as "column|severity|message", in col_I and e_I
-		n=0
-		eval set -- "$kak_quoted_opt_line_diags"
-		for e; do
-			[ "${e%%|*}" = "$cur" ] || continue
-			e=${e#*|} sev=${e#*|} sev=${sev%%|*}
-			case $show in *" $sev "*) ;; *) continue ;; esac
-			# insert by column, descending
-			i=$n
-			while [ "$i" -gt 0 ]; do
-				eval "pc=\$col_$((i - 1))"
-				[ "$pc" -lt "${e%%|*}" ] || break
-				eval "col_$i=\$pc e_$i=\$e_$((i - 1))"
-				i=$((i - 1))
-			done
-			eval "col_$i=\${e%%|*} e_$i=\$e"
-			n=$((n + 1))
-		done
-		args= i=0
-		while [ "$i" -lt "$n" ]; do
-			eval "c=\$col_$i e=\$e_$i"
-			echo "try %{ select $cur.$c,$cur.$c; set-option -add window line_diags_dcols %val{cursor_display_column} } catch %{ set-option -add window line_diags_dcols 1 }"
-			double "'" "$e"; args="$args '$r'"
-			i=$((i + 1))
-		done
-		# the whole line: the lines below hang from its end (and its width
-		# says whether it wraps)
-		echo "select $cur.1,$cur.1; execute-keys x; set-option window line_diags_eolcol %val{cursor_display_column}"
-		printf '%s\n' "line-diags-draw$args"
 	}
 }
-
 # line-diags-draw COLUMN|SEVERITY|MESSAGE...: rightmost first, their screen
-# columns in line_diags_dcols; the main selection is the cursor's whole line
+# columns measured into line_diags_dcols; the main selection is the cursor's
+# whole line
 define-command -override -hidden -params .. line-diags-draw %{
 	evaluate-commands %sh{
-		double() {
-			r= rest=$2
-			while :; do
-				case $rest in
-				*"$1"*) r="$r${rest%%"$1"*}$1$1" rest=${rest#*"$1"} ;;
-				*) r=$r$rest; return ;;
-				esac
-			done
-		}
-		# subst FROM TO S: S with each FROM replaced by TO, in $r
-		subst() {
-			r= rest=$3
-			while :; do
-				case $rest in
-				*"$1"*) r="$r${rest%%"$1"*}$2" rest=${rest#*"$1"} ;;
-				*) r=$r$rest; return ;;
-				esac
-			done
-		}
-		# markup text (\ and the left brace escaped), then a range-specs
-		# element (\ and | escaped again), in $r. (The brace comes from
-		# printf: kak's parser counts the braces in this block.)
-		lb=$(printf '\173')
-		esc() {
-			subst '\' '\\\\' "$1"; subst "$lb" '\\'"$lb" "$r"; subst '|' '\|' "$r"
-		}
-		cur=$kak_cursor_line n=$#
-		i=0
-		for e; do
-			sev=${e#*|} sev=${sev%%|*}
-			case $sev in
-			error) f=InlayDiagnosticError ;; warning) f=InlayDiagnosticWarning ;;
-			info) f=InlayDiagnosticInfo ;; *) f=InlayDiagnosticHint ;;
-			esac
-			eval "f_$i=\$f m_$i=\${e#*|*|}"
-			i=$((i + 1))
-		done
-		i=0
-		eval set -- "$kak_quoted_opt_line_diags_dcols"
-		for d; do eval "p_$i=\$((d - 1))"; i=$((i + 1)); done
-
-		# the end-of-line messages, less this line's if it gets lines below
-		eval set -- "$kak_quoted_opt_lsp_inlay_diagnostics"
-		if [ $# -eq 0 ]; then
-			echo 'set-option window line_diags_eol %val{timestamp}'
-		else
-			eol="'$1'"; shift
-			for e; do
-				[ "$n" -gt 0 ] && [ "${e%%|*}" = "$cur" ] && continue
-				double "'" "$e"; eol="$eol '$r'"
-			done
-			printf '%s\n' "set-option window line_diags_eol $eol"
-		fi
-		if [ "$n" -eq 0 ]; then
-			echo 'set-option window line_diags_view %val{timestamp}'
-			echo 'set-option window line_diags_drawn 0'
-			exit
-		fi
-
-		# blanks to column $2 with a │ at each diagnostic left of it still to
-		# come (after the $1-th), in $lead
-		blanks() { while [ "$1" -gt 0 ]; do lead="$lead "; set -- $(($1 - 1)); done; }
-		mklead() {
-			lead= at=0 j=$((n - 1))
-			while [ "$j" -gt "$1" ]; do
-				eval "pj=\$p_$j fj=\$f_$j"
-				if [ "$pj" -lt "$2" ] && [ "$pj" -ge "$at" ]; then
-					lead="$lead{Default}"; blanks $((pj - at))
-					lead="$lead{$fj}│"; at=$((pj + 1))
-				fi
-				j=$((j - 1))
-			done
-			lead="$lead{Default}"; blanks $(($2 - at))
-		}
-		# text width: the window less the gutter (diagnostic flags, line
-		# numbers, │, and the git gutter's column when it has any flags) and
-		# the end-of-line mark show-whitespaces draws after each line (these
-		# included: a line any wider wraps)
-		digits=${#kak_buf_line_count}; [ "$digits" -ge 2 ] || digits=2
-		width=$((kak_window_width - digits - 3))
-		case $kak_opt_git_gutter_flags in *' '*) width=$((width - 1)) ;; esac
-		# a line that wraps puts its columns elsewhere on screen, and one
-		# too far right leaves too little room (under 20 columns) right of
-		# it: then just the messages, from the left. No line drawn here may
-		# be wider than the window: Kakoune 2026.05.21 spins (or crashes)
-		# wrapping lines below wider than the window. One too narrow for
-		# even that gets none.
-		flat=
-		[ "$kak_opt_line_diags_eolcol" -gt "$width" ] && flat=1
-		i=0
-		while [ "$i" -lt "$n" ]; do
-			eval "p=\$p_$i"; [ $((width - p - 2)) -ge 20 ] || flat=1
-			i=$((i + 1))
-		done
-		if [ -n "$flat" ]; then
-			i=0; while [ "$i" -lt "$n" ]; do eval "p_$i=0"; i=$((i + 1)); done
-		fi
-		if [ "$width" -lt 12 ]; then
-			echo 'set-option window line_diags_view %val{timestamp}'
-			echo 'set-option window line_diags_drawn 0'
-			exit
-		fi
-		text= i=0
-		while [ "$i" -lt "$n" ]; do
-			eval "p=\$p_$i f=\$f_$i m=\$m_$i"
-			w=$((width - p - 2))
-			first=1
-			# word-wrapped to $w columns
-			while [ -n "$m" ]; do
-				chunk= rest=$m
-				while [ -n "$rest" ]; do
-					word=${rest%% *}
-					case $rest in *' '*) rest=${rest#* } ;; *) rest= ;; esac
-					# a word too long for a line: its first $w characters
-					if [ "${#word}" -gt "$w" ]; then
-						tail=$word head=
-						while [ "${#head}" -lt "$w" ]; do
-							head=$head${tail%"${tail#?}"} tail=${tail#?}
-						done
-						word=$head rest="$tail${rest:+ $rest}"
-					fi
-					if [ -z "$chunk" ]; then chunk=$word
-					elif [ $((${#chunk} + 1 + ${#word})) -le "$w" ]; then chunk="$chunk $word"
-					else rest="$word${rest:+ $rest}"; break
-					fi
-				done
-				m=$rest
-				mklead "$i" "$p"
-				esc "$chunk"
-				if [ -n "$first" ]; then
-					text="$text
-$lead{$f}└─$r"
-				else
-					text="$text
-$lead{Default}  {$f}$r"
-				fi
-				first=
-			done
-			i=$((i + 1))
-		done
-		double "'" "${kak_selection_desc##*,}+0|$text"
-		printf "set-option window line_diags_view %%val{timestamp} '%s'\n" "$r"
-		echo 'set-option window line_diags_drawn 1'
+		# (read by line_diags_sh: kak_cursor_line kak_window_width
+		# kak_buf_line_count kak_opt_git_gutter_any
+		# kak_quoted_opt_lsp_inlay_diagnostics)
+		eval "$kak_opt_line_diags_sh"
+		dcols=; eval "for d in $kak_quoted_opt_line_diags_dcols; do dcols=\"\$dcols \$d\"; done"
+		eolcol=$kak_opt_line_diags_eolcol lineend=${kak_selection_desc##*,}
+		draw "$@"
 	}
 }
 
 # Redraw when the cursor changes line. Done without a shell otherwise: a
-# no-op command per unchanged line (line_diags_seen - cursor_line = 0), and
-# per buffer with no diagnostics and nothing drawn.
+# no-op command per unchanged line (line_diags_seen - cursor_line = 0), per
+# buffer with no diagnostics and nothing drawn, and per line without any
+# (the cursor's line, less those with some, is still one: line-diags-
+# elsewhere takes one argument), where what's drawn just goes.
 define-command -override -hidden line-diags-same-0 nop
 define-command -override -hidden line-diags-skip-0-0 nop
+define-command -override -hidden -params 1 line-diags-elsewhere nop
+define-command -override -hidden line-diags-clear-0 nop
 define-command -override -hidden line-diags-idle %{
 	try %{
 		evaluate-commands "line-diags-skip-%opt{line_diags_n}-%opt{line_diags_drawn}"
@@ -1170,7 +1283,20 @@ define-command -override -hidden line-diags-idle %{
 			evaluate-commands "line-diags-same-%opt{line_diags_seen}"
 			set-option window line_diags_seen %val{cursor_line}
 		} catch %{
-			line-diags-render
+			try %{
+				set-option window line_diags_cmp %val{cursor_line}
+				set-option -remove window line_diags_cmp %opt{line_diags_lines}
+				evaluate-commands -verbatim line-diags-elsewhere %opt{line_diags_cmp}
+				set-option window line_diags_seen %val{cursor_line}
+				# (as line-diags-draw leaves it with none to draw)
+				try %{ evaluate-commands "line-diags-clear-%opt{line_diags_drawn}" } catch %{
+					set-option window line_diags_view %val{timestamp}
+					set-option window line_diags_eol %opt{lsp_inlay_diagnostics}
+					set-option window line_diags_drawn 0
+				}
+			} catch %{
+				line-diags-render
+			}
 		}
 	}
 }
@@ -1180,10 +1306,27 @@ hook -group kakrc global WinDisplay .* %{ set-option window line_diags_seen 0 }
 # and when the window changes size, now: the lines below were cut to the old
 # width. Left wider than the window, Kakoune 2026.05.21 can crash on them
 # ("cannot create std::vector larger than max_size()", shrinking a split
-# showing a long wrapped line's diagnostics).
+# showing a long wrapped line's diagnostics). Kakoune says so too when only
+# the gutter's width changes, which it does as a line with the git gutter's
+# only flag is typed in (the flag goes until the gutter is worked out
+# again), twice a key: so only when the size, the git gutter's column or the
+# line count (its digits) are not what they were (compared without a shell:
+# the key less the last one is nothing then, as line-diags-none takes).
+# (In each client: WinResize runs without one, its cursor on line 1.)
+define-command -override -hidden -params 0 line-diags-none nop
+define-command -override -hidden line-diags-resized %{
+	set-option window line_diags_cmp "%val{window_height}.%val{window_width}|%opt{git_gutter_any}|%val{buf_line_count}"
+	set-option -remove window line_diags_cmp %opt{line_diags_size}
+	try %{
+		evaluate-commands -verbatim line-diags-none %opt{line_diags_cmp}
+	} catch %{
+		set-option window line_diags_size "%val{window_height}.%val{window_width}|%opt{git_gutter_any}|%val{buf_line_count}"
+		set-option window line_diags_seen 0
+		line-diags-idle
+	}
+}
 hook -group kakrc global WinResize .* %{
-	set-option window line_diags_seen 0
-	line-diags-idle
+	try %{ evaluate-commands -verbatim each-client line-diags-resized %val{client_list} }
 }
 
 # kak-tree-sitter's text objects: <a-i>f, ]f etc. (f function, t type,
