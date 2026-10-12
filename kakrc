@@ -10,6 +10,11 @@
 # unless declared with one, which only settings are. The plugins load
 # once: kakrc_loaded, set at the end.
 declare-option -hidden bool kakrc_loaded
+# a newline, for shells: $kak_opt_nl (sh has no "\n", $(printf) is a
+# process, and one typed into a string puts a line at column 1 in the
+# middle of its block)
+declare-option -hidden str nl '
+'
 remove-hooks global kakrc(-.*)?
 # the first time only: evaluate-commands "kakrc-first-%opt{kakrc_loaded}"
 define-command -override -hidden kakrc-first-false nop
@@ -114,8 +119,7 @@ evaluate-commands %sh{
 				faces= names=' '
 				while IFS= read -r l; do
 					case $l in 'set-face global ts_'*) ;; *) continue ;; esac
-					faces="$faces$l
-"
+					faces="$faces$l$kak_opt_nl"
 					l=${l#set-face global }; names="$names${l%% *} "
 				done <<-EOF
 					$rc
@@ -131,8 +135,7 @@ evaluate-commands %sh{
 						q=${p#ts_}
 						case $q in *_*) q=ts_${q%_*} ;; *) q=default ;; esac
 						names="$names$p "
-						next="${next}set-face global $p $q
-"
+						next="${next}set-face global $p $q$kak_opt_nl"
 					done <<-EOF
 						$missing
 					EOF
@@ -154,8 +157,7 @@ evaluate-commands %sh{
 				printf "set-option -add global plugin_rc '%s\n'\n" "$(printf %s "$rc" | sed "s/'/''/g")"
 				faces=
 				while IFS= read -r l; do
-					case $l in 'set-face global '*) faces="$faces$l
-" ;; esac
+					case $l in 'set-face global '*) faces="$faces$l$kak_opt_nl" ;; esac
 				done <<-EOF
 					$rc
 				EOF
@@ -719,8 +721,7 @@ define-command -override -hidden -params 1 lsp-edit-done %{
 define-command -override -hidden lsp-edit-finish %{
 	set-option global lsp_edit_armed ''
 	evaluate-commands %sh{
-		nl='
-'
+		nl=$kak_opt_nl
 		# holds left (in the buffer asked from, and ones that had unsaved
 		# changes, kak-lsp writes nothing), and the buffers to reopen in
 		# the server once written (below); buffers opened for nothing
@@ -1166,11 +1167,9 @@ declare-option -hidden str line_diags_sh %{
 				mklead "$i" "$p"
 				esc "$chunk"
 				if [ -n "$first" ]; then
-					text="$text
-$lead{$f}└─$r"
+					text="$text$nl$lead{$f}└─$r"
 				else
-					text="$text
-$lead{InlineDiagnosticDefault}  {$f}$r"
+					text="$text$nl$lead{InlineDiagnosticDefault}  {$f}$r"
 				fi
 				first=
 			done
@@ -1179,8 +1178,7 @@ $lead{InlineDiagnosticDefault}  {$f}$r"
 		double "'" "$text"
 		printf "line-diags-hang %s '%s'\n" "${lineend%.*}.$((${lineend#*.} + 1))" "$r"
 	}
-	nl='
-'
+	nl=$kak_opt_nl
 	tab=$(printf '\t')
 }
 
@@ -1262,7 +1260,7 @@ hook -group kakrc global ClientClose .* %{
 define-command -override -hidden lsp-show-goto-buffer -params 4..5 %{
 	try %{ evaluate-commands -draft %{ execute-keys ',;x'; set-option window line_diags_text %val{selection} } }
 	evaluate-commands %sh{
-		# (read by line_diags_sh: kak_buffile kak_cursor_line kak_window_width
+		# (read by line_diags_sh: kak_opt_nl kak_buffile kak_cursor_line kak_window_width
 		# kak_buf_line_count kak_opt_tabstop
 		# kak_quoted_opt_lsp_inlay_diagnostics
 		# kak_quoted_opt_inline_diagnostics_severities)
@@ -1342,7 +1340,7 @@ define-command -override -hidden line-diags-render %{
 	evaluate-commands -draft %{
 		execute-keys ',;x'
 		evaluate-commands %sh{
-			# (read by line_diags_sh: kak_cursor_line kak_window_width
+			# (read by line_diags_sh: kak_opt_nl kak_cursor_line kak_window_width
 			# kak_buf_line_count kak_opt_tabstop
 			# kak_quoted_opt_lsp_inlay_diagnostics
 			# kak_quoted_opt_inline_diagnostics_severities)
@@ -1356,7 +1354,7 @@ define-command -override -hidden line-diags-render %{
 # whole line
 define-command -override -hidden -params .. line-diags-draw %{
 	evaluate-commands %sh{
-		# (read by line_diags_sh: kak_cursor_line kak_window_width
+		# (read by line_diags_sh: kak_opt_nl kak_cursor_line kak_window_width
 		# kak_buf_line_count kak_quoted_opt_lsp_inlay_diagnostics)
 		eval "$kak_opt_line_diags_sh"
 		dcols=; eval "for d in $kak_quoted_opt_line_diags_dcols; do dcols=\"\$dcols \$d\"; done"
@@ -1984,8 +1982,7 @@ define-command -override -hidden -params ..1 clipboard-yank %{
 		else
 			eval set -- "$kak_quoted_selections"
 			n=$# all= sep=
-			for s; do all="$all$sep$s" sep='
-'; done
+			for s; do all="$all$sep$s" sep=$kak_opt_nl; done
 			printf %s "$all" | eval "$copy" >/dev/null 2>&1
 		fi
 		echo "echo -markup '{Information}yanked $n selection(s) to the clipboard'"
@@ -2011,8 +2008,7 @@ define-command -override -hidden -params 1 clipboard-paste %{
 			# (kak_opt_clipboard_copy kak_opt_clipboard_paste)
 			eval "$kak_opt_clipboard_sh"
 			text=$(eval "$paste" 2>/dev/null; echo .); text=${text%.}
-			nl='
-'
+			nl=$kak_opt_nl
 			if [ "$kak_selection_count" -gt 1 ]; then
 				body=${text%"$nl"} n=1 left=$body
 				while :; do
@@ -3182,8 +3178,7 @@ define-command -override buffer-close-all -docstring 'buffer-close-all: close ev
 }
 define-command -override yank-join -params ..1 -docstring 'yank-join [<separator>]: yank the selections joined by <separator> (a newline) (Helix :yank-join)' %{
 	set-register dquote %sh{
-		if [ $# -gt 0 ]; then sep=$1; else sep='
-'; fi
+		if [ $# -gt 0 ]; then sep=$1; else sep=$kak_opt_nl; fi
 		eval set -- "$kak_quoted_selections"
 		out=$1; shift
 		for s; do out=$out$sep$s; done
@@ -3563,8 +3558,7 @@ define-command -override buffer-picker -docstring 'fuzzy-pick a buffer (tmux pop
 				esac
 			done
 		}
-		nl='
-'
+		nl=$kak_opt_nl
 		# each buffer once, but *debug*: B's files and the commands
 		# writing its cursor line, modified flag and text there
 		n=0 seen=$nl

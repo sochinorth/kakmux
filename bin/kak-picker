@@ -260,8 +260,7 @@ case $1 in
             # scripts, the plugins' (PLUGINRC, as they loaded) and the kakrc
 	config=$2 runtime=$3
 	auto=$config/autoload; [ -d "$auto" ] || auto=$runtime/autoload
-	nl='
-'
+	nl=$(printf '\nx'); nl=${nl%x}
 	IFS=$nl
 	set -- "$runtime/doc/commands.asciidoc" $(find -L "$auto" -type f -name '*.kak' 2>/dev/null | sort) "$4" "$config/kakrc"
 	unset IFS
