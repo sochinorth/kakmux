@@ -549,6 +549,18 @@ try %{
 	# modeline: no breadcrumbs (Helix has none, and they're a request
 	# whenever keys stop).
 	remove-hooks global lsp-breadcrumbs
+	# clangd keeps its preambles (a PCH per open file) in memory, not as
+	# $TMPDIR/preamble-*.pch: a clangd gone without kak-lsp's shutdown (kak
+	# crashed or killed, kak-lsp killed) leaves those files behind, for good.
+	# kak-lsp's C/C++ server table (21.0.2), with the flag added.
+	remove-hooks global lsp-filetype-c-family
+	hook -group kakrc global BufSetOption filetype=(?:c|cpp|objc) %{
+		set-option buffer lsp_servers %{
+			[clangd]
+			args = ["--log=error", "--pch-storage=memory"]
+			root_globs = ["compile_commands.json", ".clangd", ".git", ".hg"]
+		}
+	}
 	# Helix's gutter mark, coloured by severity
 	set-option global lsp_diagnostic_line_error_sign   '●'
 	set-option global lsp_diagnostic_line_warning_sign '●'
