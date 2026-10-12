@@ -1190,8 +1190,28 @@ define-command -override -hidden git-gutter-known-yes nop
 define-command -override -hidden git-gutter-known-no nop
 define-command -override -hidden git-gutter-on-yes nop
 
+# Helix's workspace, per buffer: the nearest directory up from its file's
+# with a .git, .jj, .hg, .svn or .helix in it, else kak's cwd (for buffers
+# without a file, the cwd's own). The pickers start there (<space>f, /, g)
+# and the status line names files from there. Worked out as the gutter
+# locates the buffer's repository (when first shown, saved, focused), in
+# the same shell, by tests alone. kak-lsp finds each server's root its own
+# way (its root_globs: for clangd compile_commands.json, .clangd, .git, .hg,
+# nearest first), which mostly comes to the same directory.
+declare-option -hidden str workspace_root
+
 define-command -override -hidden git-gutter-locate %{
 	evaluate-commands %sh{
+		case $kak_buffile in /*) d=${kak_buffile%/*} ;; *) d=$PWD ;; esac
+		ws=$PWD
+		while :; do
+			if [ -e "$d/.git" ] || [ -e "$d/.jj" ] || [ -e "$d/.hg" ] || [ -e "$d/.svn" ] || [ -e "$d/.helix" ]; then
+				ws=${d:-/}; break
+			fi
+			[ -n "$d" ] || break
+			d=${d%/*}
+		done
+		printf "set-option buffer workspace_root '%s'\n" "$(printf %s "$ws" | sed "s/'/''/g")"
 		root=
 		case $kak_buffile in
 		/*) root=$(git -C "${kak_buffile%/*}" rev-parse --show-toplevel 2>/dev/null) ;;
