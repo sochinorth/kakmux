@@ -44,10 +44,10 @@ evaluate-commands %sh{
 	cache=${XDG_CACHE_HOME:-$HOME/.cache}/kak
 	# source FILE, kak-quoted (all in the shell, no other processes)
 	src() {
-		r= rest=$1
+		r= rest=$1 q=\'
 		while :; do
 			case $rest in
-			*"'"*) r="$r${rest%%"'"*}''" rest=${rest#*"'"} ;;
+			*"$q"*) r="$r${rest%%"$q"*}$q$q" rest=${rest#*"$q"} ;;
 			*) printf "source '%s'\n" "$r$rest"; return ;;
 			esac
 		done
@@ -203,7 +203,7 @@ set-face global InlineDiagnosticError InlayDiagnosticError
 set-face global InlineDiagnosticWarning InlayDiagnosticWarning
 set-face global InlineDiagnosticInfo InlayDiagnosticInfo
 set-face global InlineDiagnosticHint InlayDiagnosticHint
-set-face global IndentGuideActive +d@Default
+set-face global IndentGuideActive +df@Default
 set-face global PickerBackground MenuBackground
 }
 evaluate-commands %opt{plugin_faces}
@@ -1617,10 +1617,10 @@ define-command -override -hidden git-gutter-locate %{
 	evaluate-commands %sh{
 		# kak-quoted, in $r (all in the shell, no other processes)
 		kq() {
-			r= rest=$1
+			r= rest=$1 q=\'
 			while :; do
 				case $rest in
-				*"'"*) r="$r${rest%%"'"*}''" rest=${rest#*"'"} ;;
+				*"$q"*) r="$r${rest%%"$q"*}$q$q" rest=${rest#*"$q"} ;;
 				*) r="'$r$rest'"; return ;;
 				esac
 			done
@@ -3962,10 +3962,10 @@ define-command -override -hidden client-hello %{
 	evaluate-commands %sh{
 		# kak-quoted, in $r (all in the shell, no other processes)
 		kq() {
-			r= rest=$1
+			r= rest=$1 q=\'
 			while :; do
 				case $rest in
-				*"'"*) r="$r${rest%%"'"*}''" rest=${rest#*"'"} ;;
+				*"$q"*) r="$r${rest%%"$q"*}$q$q" rest=${rest#*"$q"} ;;
 				*) r="'$r$rest'"; return ;;
 				esac
 			done
