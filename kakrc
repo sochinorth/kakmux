@@ -21,6 +21,7 @@ define-command -override -hidden kakrc-first-false nop
 # plugin_faces for :colorscheme to reset to, for schemes that don't set them
 # (and for :config-reload, which doesn't load the plugins again).
 declare-option -hidden str plugin_faces
+declare-option -hidden str plugin_rc
 evaluate-commands %sh{
 	[ "$kak_opt_kakrc_loaded" = true ] && exit
 	command -v kak-tree-sitter >/dev/null || exit
@@ -54,6 +55,8 @@ evaluate-commands %sh{
 	# its server (started by the first session), which this session joins
 	rc=$(kak-tree-sitter -dks --init "$kak_session") || exit
 	printf '%s\n' "$rc"
+	# (kept for the command palette, which lists what it defines)
+	printf "set-option -add global plugin_rc '%s\n'\n" "$(printf %s "$rc" | sed "s/'/''/g")"
 	# ts_<scope> faces link to their parent scope's, some of which it leaves
 	# undefined (ts_markup for ts_markup_bold, ...): define those too
 	faces= names=' '
@@ -91,6 +94,7 @@ evaluate-commands %sh{
 	command -v kak-lsp >/dev/null || exit
 	rc=$(kak-lsp) || exit
 	printf '%s\n' "$rc"
+	printf "set-option -add global plugin_rc '%s\n'\n" "$(printf %s "$rc" | sed "s/'/''/g")"
 	faces=
 	while IFS= read -r l; do
 		case $l in 'set-face global '*) faces="$faces$l
@@ -2000,6 +2004,56 @@ define-command -override file-picker -params ..1 -docstring "file-picker [-cwd]:
 map global user b ':buffer-picker<ret>'   -docstring 'buffer picker'
 map global user f ':file-picker<ret>'     -docstring 'file picker (workspace)'
 map global user F ':file-picker -cwd<ret>' -docstring "file picker (kak's cwd)"
+
+# --- command palette (<space>?) ------------------------------------------------
+# Helix's: every command, with its keys and the first line of its docstring,
+# and every mapping of the menus (user, goto, view, object, the user modes)
+# that isn't just a command's key. Enter runs it; a command that needs
+# arguments opens the prompt with its name typed. The commands are read
+# from the scripts that define them (bin/kak-picker --parse: Kakoune's docs,
+# the autoloaded scripts, the plugins' as they loaded, this kakrc), once,
+# and each time those that exist just then are kept (modules load later:
+# a command exists if an alias to it can be made). Mappings come from
+# :debug mappings, which, like :debug faces, is dumped once and cached.
+# Both are read again after :config-reload.
+# (The plugins' scripts go to the parser in a file: an environment
+# variable can't hold them.)
+declare-option -hidden str palette_cmds
+declare-option -hidden str palette_probe
+declare-option -hidden str-list palette_ok
+declare-option -hidden bool palette_loaded false
+declare-option -hidden str mappings_cache
+set-option global palette_loaded false
+set-option global mappings_cache ''
+define-command -override -hidden palette-load %{
+	evaluate-commands %sh{
+		[ -n "$kak_opt_mappings_cache" ] ||
+			echo "evaluate-commands -buffer *debug* %{ debug mappings; execute-keys 'ge<a-?>^Mappings:<ret>'; set-option global mappings_cache %val{selection} }"
+		[ "$kak_opt_palette_loaded" = true ] && exit
+		f=$(mktemp "${TMPDIR:-/tmp}/kak-palette.XXXXXX") || exit
+		echo "echo -to-file '$f' %opt{plugin_rc}; palette-parse '$f'"
+	}
+}
+define-command -override -hidden -params 1 palette-parse %{
+	evaluate-commands %sh{
+		~/.config/kak/bin/kak-picker --parse "$kak_config" "$kak_runtime" "$1"
+		rm -f -- "$1"
+	}
+	set-option global palette_loaded true
+}
+define-command -override command-palette -docstring 'run any command or mapping, found by name, key or docstring (picker)' %{
+	palette-load
+	set-option global palette_ok
+	evaluate-commands %opt{palette_probe}
+	evaluate-commands %sh{
+		dir=$(mktemp -d "${TMPDIR:-/tmp}/kak-picker.XXXXXX") || exit
+		echo "echo -to-file '$dir/cmds' %opt{palette_cmds}"
+		echo "echo -to-file '$dir/ok' %opt{palette_ok}"
+		echo "echo -to-file '$dir/mappings' %opt{mappings_cache}"
+		echo "picker-open commands '$dir'"
+	}
+}
+map global user ? ':command-palette<ret>' -docstring 'command palette'
 
 # --- splits (tmux) ------------------------------------------------------------
 # A split is a tmux pane running another client of this session, so all
