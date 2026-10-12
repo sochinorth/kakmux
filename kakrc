@@ -220,8 +220,22 @@ hook -group kakrc global FocusOut .* %{
 try %{ remove-highlighter "global/show-whitespaces_-tab_│_-tabpad_ _-spc_ _-lf_ _-nbsp_⍽" }
 add-highlighter -override global/whitespace show-whitespaces -tab ' ' -tabpad ' ' -spc ' ' -lf ' ' -nbsp '⍽' -indent ''
 
-# soft-wrap.enable = true
-add-highlighter -override global/ wrap -word -indent
+# soft-wrap.enable = true, wrap-indicator = "↪ " (named, see whitespace
+# above: the unnamed one an earlier kakrc added goes)
+try %{ remove-highlighter global/wrap_-word_-indent }
+add-highlighter -override global/wrap wrap -word -indent -marker '↪ '
+
+# scrolloff = 5 (lines; Kakoune's second number, columns, 0)
+set-option global scrolloff 5,0
+
+# Kakoune's own: Clippy (the assistant drawn beside info boxes) unless
+# disable_clippy, Kakoune's spelling of ui_options' terminal_assistant=none
+declare-option -docstring 'no Clippy beside info boxes (ui_options terminal_assistant)' \
+	bool disable_clippy false
+define-command -override -hidden clippy-false %{ set-option -add global ui_options terminal_assistant=clippy }
+define-command -override -hidden clippy-true %{ set-option -add global ui_options terminal_assistant=none }
+hook -group kakrc global GlobalSetOption disable_clippy=.* %{ evaluate-commands "clippy-%opt{disable_clippy}" }
+evaluate-commands "clippy-%opt{disable_clippy}"
 
 # Like Helix, opening a file over the blank startup *scratch* replaces it
 # rather than leaving it behind (:e, pickers, anything that switches buffer).
