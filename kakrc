@@ -2356,17 +2356,13 @@ map global normal <a-right> ":tree-sitter-nav '{ ""next_sibling"": { ""cousin"":
 # ts-collect-step: a select from a hook (line-diags-render's) goes through
 # as usual. A node the selection doesn't cover exactly is first taken whole
 # (any request answers with it then): an answer around the selection asked
-# from is that. kak-tree-sitter 3.2.2 sometimes answers a request twice, the
-# second time late (it reads a client's socket again once it's closed), so
-# an answer that would end it (the same again) is only taken on the second
-# time running, and for a moment after, stray answers are dropped.
+# from is that. Each request is answered once, in order (kak-tree-sitter
+# 3.2.2-3, patched): the same answer again ends it.
 declare-option -hidden str ts_collect_mode
 declare-option -hidden str ts_collect_from
 declare-option -hidden str ts_collect_last
 declare-option -hidden str-list ts_collect_sels
-declare-option -hidden int ts_collect_same
 declare-option -hidden int ts_collect_seq
-declare-option -hidden int ts_collect_step
 declare-option -hidden str ts_collect_live
 define-command -override -hidden -params 1 ts-select-all %{
 	ts-has-tree
@@ -2375,27 +2371,25 @@ define-command -override -hidden -params 1 ts-select-all %{
 	set-option window ts_collect_from %val{selection_desc}
 	set-option window ts_collect_last ''
 	set-option window ts_collect_sels
-	set-option window ts_collect_same 0
-	set-option -add global ts_collect_seq 1
-	set-option window ts_collect_live %opt{ts_collect_seq}
-	try %{ unalias buffer select ts-collect-swallow }
 	try %{ unalias window select ts-collect-step }
 	alias window select ts-collect-step
 	ts-collect-timer
 	ts-collect-first
 }
-# no answer for 2s (an error on the server's side): what's in, selected
+# no answer for 2s (an error on the server's side): what's in, selected;
+# each request (re)arms it, and only the last one armed counts
 define-command -override -hidden ts-collect-timer %{
-	set-option -add window ts_collect_step 1
+	set-option -add global ts_collect_seq 1
+	set-option window ts_collect_live %opt{ts_collect_seq}
 	nop %sh{
-		(sleep 2; printf "evaluate-commands -client '%s' ts-collect-abort %s %s\n" \
-			"$kak_client" "$kak_opt_ts_collect_live" "$kak_opt_ts_collect_step" |
+		(sleep 2; printf "evaluate-commands -client '%s' ts-collect-abort %s\n" \
+			"$kak_client" "$kak_opt_ts_collect_live" |
 			kak -p "$kak_session") >/dev/null 2>&1 </dev/null &
 	}
 }
-define-command -override -hidden -params 2 ts-collect-abort %{
+define-command -override -hidden -params 1 ts-collect-abort %{
 	evaluate-commands %sh{
-		[ "$1" = "$kak_opt_ts_collect_live" ] && [ "$2" = "$kak_opt_ts_collect_step" ] || exit
+		[ "$1" = "$kak_opt_ts_collect_live" ] || exit
 		echo 'try %{ unalias window select ts-collect-step }; ts-collect-done'
 	}
 }
@@ -2423,27 +2417,22 @@ define-command -override -hidden -params .. ts-collect-step %{
 				if [ "$a" -le "$b" ]; then lo=$a hi=$b; else lo=$b hi=$a; fi
 			}
 			again='alias window select ts-collect-step; ts-collect-timer'
-			once="set-option window ts_collect_same 1; $again"
-			same=$kak_opt_ts_collect_same
 			lohi "$kak_selection_desc"; rlo=$lo rhi=$hi
 			if [ -z "$kak_opt_ts_collect_last" ]; then
 				# the first answer
 				lohi "$kak_opt_ts_collect_from"
 				if [ "$rlo" -eq "$lo" ] && [ "$rhi" -eq "$hi" ]; then
-					[ "$same" -ge 1 ] || { echo "$once; ts-collect-first"; exit; }
 					# the node itself: no children, or it's the first sibling
 					[ "$kak_opt_ts_collect_mode" = children ] && { echo 'ts-collect-done'; exit; }
 				elif [ "$rlo" -le "$lo" ] && [ "$hi" -le "$rhi" ]; then
 					# the node around the selection: from it, again
 					echo 'set-option window ts_collect_from %val{selection_desc}'
-					echo "set-option window ts_collect_same 0; $again; ts-collect-first"; exit
+					echo "$again; ts-collect-first"; exit
 				fi
 			elif [ "$kak_selection_desc" = "$kak_opt_ts_collect_last" ]; then
 				# no next sibling
-				[ "$same" -ge 1 ] || { echo "$once; ts-collect-next"; exit; }
 				echo 'ts-collect-done'; exit
 			fi
-			echo 'set-option window ts_collect_same 0'
 			echo 'set-option window ts_collect_last %val{selection_desc}'
 			echo 'set-option -add window ts_collect_sels %val{selection_desc}'
 			echo "$again; ts-collect-next"
@@ -2464,20 +2453,6 @@ define-command -override -hidden ts-collect-done %{
 			case $text in *[[:alnum:]_]*) keep="$keep $d" ;; esac
 		done
 		[ -n "$keep" ] && echo "select$keep"
-		# stray answers still to come: dropped for a moment (in the buffer,
-		# which unlike the window can be reached whatever the client shows)
-		b=$(printf %s "$kak_bufname" | sed 's/\\/\\\\/g; s/,/\\,/g' | sed "s/'/''/g")
-		(sleep 0.5; printf "evaluate-commands -buffer '%s' %%{ try %%{ unalias buffer select ts-collect-swallow } }\n" "$b" |
-			kak -p "$kak_session") >/dev/null 2>&1 </dev/null &
-	}
-	alias buffer select ts-collect-swallow
-}
-define-command -override -hidden -params .. ts-collect-swallow %{
-	try %{
-		nop %val{hook_param}
-		unalias buffer select ts-collect-swallow
-		select %arg{@}
-		alias buffer select ts-collect-swallow
 	}
 }
 try %{
