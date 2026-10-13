@@ -29,7 +29,23 @@ fit() {
 # when it's there.
 conf=${XDG_CONFIG_HOME:-$HOME/.config}/kakbr/broot.hjson
 [ -e "$conf" ] && set -- --conf "$conf" "$@"
-PATH="$HOME/.local/lib/broot-opener:$PATH" broot "$@" </dev/tty >/dev/tty &
+# Its git marks kept current: broot's watch (:toggle_watch, as alt-w) redraws
+# the tree when a file under it changes; what it misses (a commit or git add
+# touches only .git) kakbr.conf's focus hooks send it as :refresh, through
+# this server (--listen, named after kak's session, @kakbr_broot). Its
+# socket is /tmp/broot-server-NAME.sock whatever TMPDIR, left behind when
+# broot is killed (with kakbr): removed here. broot refuses to start on a
+# name a live one has (a dead one's socket it replaces): then it does
+# without.
+name=$KAKBR_SESSION sock=/tmp/broot-server-$KAKBR_SESSION.sock
+if [ -n "$name" ] && ! { [ -S "$sock" ] && broot --send "$name" --get-root >/dev/null 2>&1; }; then
+	set -- --listen "$name" "$@"
+	tmux set-option -g @kakbr_broot "$name"
+	trap 'rm -f "$sock"' EXIT
+	trap 'exit 129' HUP
+	trap 'exit 143' TERM
+fi
+PATH="$HOME/.local/lib/broot-opener:$PATH" broot --cmd :toggle_watch "$@" </dev/tty >/dev/tty &
 pid=$!
 
 # The trap only flags; fit runs here, so the resize it causes (another
