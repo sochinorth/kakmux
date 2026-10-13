@@ -75,12 +75,15 @@ export KAKOUNE_CONFIG_DIR=$C
 # scripts/ into $R/bin (first on PATH). reload: kakrc sources the real one
 # three times (config-reload safety).
 mkcfg() {
-	rm -rf "$C"; mkdir -p "$C/bin" "$C/colors"
+	rm -rf "$C"; mkdir -p "$C/bin" "$C/colors" "$C/rc"
 	cp "$KM_SRC"/colors/*.kak "$C/colors/"
 	for f in "$KM_SRC"/bin/*; do
 		sed "s|~/.config/kak|$C|g" "$f" > "$C/bin/${f##*/}"; chmod +x "$C/bin/${f##*/}"
 	done
 	sed "s|~/.config/kak|$C|g" "$KM_SRC/kakrc" > "$C/kakrc"
+	for f in "$KM_SRC"/rc/*.kak; do
+		sed "s|~/.config/kak|$C|g" "$f" > "$C/rc/${f##*/}"
+	done
 	sed "s|~/.config/kak|$C|g" "$KM_SRC/kakmux.conf" > "$C/kakmux.conf"
 	for f in "$KM_SRC"/scripts/*; do
 		sed "s|~/.config/kak|$C|g" "$f" > "$R/bin/${f##*/}"; chmod +x "$R/bin/${f##*/}"
@@ -247,7 +250,7 @@ pdirs() {
 # popwin NAME: pickers open in a tmux window "picker" instead of a popup
 # (pcap shows it, pkeys types in it)
 popwin() {
-	awk '/^define-command -override -hidden -params 2..3 picker-open/,/^}/' "$C/kakrc" |
+	awk '/^define-command -override -hidden -params 2..3 picker-open/,/^}/' "$C/rc/pickers.kak" |
 		sed 's|tmux display-popup -t "$kak_client_env_TMUX_PANE"|tmux new-window -d -n picker|; s|-d "${3:-$PWD}" \(-e "BAT_THEME=[^"]*"\) -E -B -w 90% -h 80%|-c "${3:-$PWD}" \1|' > "$R/popwin.kak"
 	grep -q 'new-window -d -n picker' "$R/popwin.kak" || fail "popwin: picker-open no longer matches the rewrite"
 	send "$1" "source $R/popwin.kak"
