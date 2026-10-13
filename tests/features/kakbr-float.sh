@@ -1,7 +1,8 @@
 # kakbr-float: <c-w> z in kakbr's broot floats the same broot (its filter
 # kept) over kak, 90% of the window (kakbr/float: a floating pane), kak
 # taking the whole layout; <c-w> z again, <esc> with nothing left to undo,
-# <c-w> l or a file opened dock it back at its width; kak ending ends it all
+# kak focused (a click), <c-w> l or a file opened dock it back at its width
+# (its legend: z and q only); kak ending ends it all
 . "$(dirname "$0")/../lib/h.sh"
 need broot
 P=$R/p/proj; mkproj "$P"
@@ -70,6 +71,7 @@ tk C-w; tk z; sleep 0.5
 expect "floated" "$(where)" "floated 142x38"
 tk C-w
 expect "legend: z docks" "$(scr | grep -c 'z: *dock')" 1
+expect "legend: z and q only" "$(scr | grep -o -e '│ [^│]*: [^│]*│' | sed 's/  *│$//; s/^│ //' | tr '\n' ',')" "z: dock,q: quit all,"
 tk z; sleep 0.5
 expect "docked" "$(where) $(popup)" "docked $w0 0"
 expect "broot focused" "$(active)" "$side"
@@ -80,6 +82,12 @@ tk C-w; tk z; sleep 0.5
 tk C-w; tk z; sleep 0.5
 expect "docked at 33" "$(where)" "docked 33"
 tb resize-pane -t "$side" -x "$w0"; sleep 0.5
+
+echo "== floated, kak focused (a click on it: select-pane): docked"
+tk C-w; tk z; sleep 0.5
+tb select-pane -t "$kak"; sleep 0.5
+expect "docked, in kak" "$(where) $(active) $(popup)" "docked $w0 $kak 0"
+tb select-pane -t "$side"; sleep 0.3
 
 echo "== floated, <c-w> l: docked, kak focused"
 tk C-w; tk z; sleep 0.5

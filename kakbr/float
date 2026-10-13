@@ -30,10 +30,11 @@ float)
 		break-pane -W -s "$pane" -x 90% -y 90% -X 5% -Y 5%
 	;;
 dock)
-	set -- $(tmux display-message -p -t "$pane" '#{pane_floating_flag} #{@kakbr_dock_w}' 2>/dev/null)
+	set -- $(tmux display-message -p -t "$pane" '#{pane_floating_flag} #{@kakbr_dock_w} #{@kakbr_kak}' 2>/dev/null)
 	[ "$1" = 1 ] || exit 0
-	# join-pane alone puts it back where it was, but at half the window
-	tmux join-pane -s "$pane" \; \
+	# left of kak's pane (named: a hook's run-shell has no current pane to
+	# go by), at the width it had (join-pane would halve the window)
+	tmux join-pane -h -b -s "$pane" -t "$3" \; \
 		resize-pane -t "$pane" -x "$2" \; \
 		set-option -wu -t "$pane" @kakbr_float \; \
 		set-option -pu -t "$pane" window-style \; \

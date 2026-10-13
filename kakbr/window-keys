@@ -4,10 +4,17 @@
 # does what it says. Any other key (<esc> too) closes it, dropped, as with
 # kak's own <c-w>. z floats broot over kak or docks it back (float, beside
 # this; z as kak's <c-w> z zooms a split); floated, l, w and q dock it first.
+# Floated, the legend leaves out l and w: docking and going to kak is what a
+# click on kak does; they still work.
 pane=$(tmux display-message -p '#{pane_id}')
 float=$(dirname "$0")/float
-if [ "$(tmux display-message -p -t "$pane" '#{pane_floating_flag}')" = 1 ]; then z=dock; else z=float; fi
-printf '\033[?25l l,<right>: focus kak\n w:         next pane\n z:         %s\n q:         quit all' "$z"
+if [ "$(tmux display-message -p -t "$pane" '#{pane_floating_flag}')" = 1 ]; then
+	z=dock
+	printf '\033[?25l z: dock\n q: quit all'
+else
+	z=float
+	printf '\033[?25l l,<right>: focus kak\n w:         next pane\n z:         float\n q:         quit all'
+fi
 stty raw -echo
 k=$(dd bs=16 count=1 2>/dev/null)
 e=$(printf '\033')
