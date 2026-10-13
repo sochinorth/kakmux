@@ -24,8 +24,8 @@ define-command -override -hidden -params 2.. each-client %{
 
 # --- tree-sitter, LSP --------------------------------------------------------
 # Helix's built-ins, here kak-tree-sitter (highlighting, text objects) and
-# kakoune-lsp; see [editor.lsp] below. Both set default faces as they load,
-# so they come before the colour scheme. Those defaults are kept in
+# kakoune-lsp; see [editor.lsp] in rc/lsp.kak. Both set default faces as they
+# load, so they come before the colour scheme. Those defaults are kept in
 # plugin_faces for :colorscheme to reset to, for schemes that don't set them
 # (and for :config-reload, which doesn't load the plugins again).
 declare-option -hidden str plugin_faces
@@ -33,7 +33,7 @@ declare-option -hidden str plugin_rc
 # Both print their Kakoune scripts as they start. What's made of those here
 # (the scripts, plugin_rc, the faces) is kept in $XDG_CACHE_HOME/kak, a file
 # per plugin, made again once it's older than the plugin's binary, this
-# kakrc or (kak-tree-sitter) its config, or was made for another binary:
+# file or (kak-tree-sitter) its config, or was made for another binary:
 # else startup sources it, rather than running them and going through their
 # output in the shell (some 40 ms). kak-tree-sitter is still told of the
 # session (its server started, for the first one): in the background, as it
@@ -99,7 +99,7 @@ evaluate-commands %sh{
 		fi
 		# its server (started by the first session), which this session joins
 		f=$cache/plugin-kak-tree-sitter.kak
-		if fresh "$f" "$kts" "$conf" "$kak_config/kakrc"; then
+		if fresh "$f" "$kts" "$conf" "$kak_config/rc/base.kak"; then
 			kak-tree-sitter -dks --init "$kak_session" >/dev/null 2>&1 </dev/null &
 			src "$f"
 		elif rc=$(kak-tree-sitter -dks --init "$kak_session"); then
@@ -142,7 +142,7 @@ evaluate-commands %sh{
 	fi
 	if lsp=$(command -v kak-lsp); then
 		f=$cache/plugin-kak-lsp.kak
-		if fresh "$f" "$lsp" "$kak_config/kakrc"; then
+		if fresh "$f" "$lsp" "$kak_config/rc/base.kak"; then
 			src "$f"
 		# (kak-lsp started with $kak_session set is a server for it)
 		elif rc=$(unset kak_session; kak-lsp); then
@@ -207,10 +207,10 @@ evaluate-commands %opt{kakrc_faces}
 
 # --- theme -------------------------------------------------------------------
 # Kakoune ships no onedark; colors/onedark.kak is a port of Helix's, tree-sitter
-# scopes and all. StatusLineInactive (see "inactive status lines" below) is set
-# first so that colour schemes can override it. Sourced straight from here
-# when it's there, as :colorscheme would find it (that looks for it with
-# find(1) in a shell).
+# scopes and all. StatusLineInactive (see "inactive status lines" in
+# rc/editor.kak) is set first so that colour schemes can override it. Sourced
+# straight from here when it's there, as :colorscheme would find it (that
+# looks for it with find(1) in a shell).
 set-face global StatusLineInactive '+d@StatusLine'
 try %{
 	evaluate-commands "nop %%file{%val{config}/colors/onedark.kak}"

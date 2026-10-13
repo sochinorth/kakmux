@@ -189,15 +189,16 @@ try %{
 }
 
 # --- search: smart case --------------------------------------------------------
-# Helix's search.smart-case: / ? <a-/> <a-?> (and z/ z?, see view mode above)
-# are case-insensitive unless the pattern has an uppercase letter. Kakoune's search prompt can't be read
-# while typing, so the prompt opens with (?i) in it, which goes as soon as an
-# uppercase letter is typed (a RawKey hook while it's open; a key run from a
-# hook goes to the prompt). It stays in the pattern otherwise, and so in the
-# search history and the / register, for n/N alike. Typing, then deleting
-# back, is followed; any other edit of the prompt (cursor keys, history,
-# completion, <c-r>) leaves it as it is from then on: (?i) or not, by hand.
-# Kakoune's own incremental search, history and n/N are untouched.
+# Helix's search.smart-case: / ? <a-/> <a-?> (and z/ z?, see view mode in
+# rc/keys.kak) are case-insensitive unless the pattern has an uppercase
+# letter. Kakoune's search prompt can't be read while typing, so the prompt
+# opens with (?i) in it, which goes as soon as an uppercase letter is typed
+# (a RawKey hook while it's open; a key run from a hook goes to the prompt).
+# It stays in the pattern otherwise, and so in the search history and the /
+# register, for n/N alike. Typing, then deleting back, is followed; any other
+# edit of the prompt (cursor keys, history, completion, <c-r>) leaves it as
+# it is from then on: (?i) or not, by hand. Kakoune's own incremental search,
+# history and n/N are untouched.
 map global normal /     ':smart-case-arm<ret>/(?i)'
 map global normal ?     ':smart-case-arm<ret>?(?i)'
 map global normal <a-/> ':smart-case-arm<ret><a-/>(?i)'

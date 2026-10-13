@@ -408,7 +408,8 @@ define-command -override -hidden line-diags-request %{
 	}
 }
 hook -group kakrc global WinDisplay .* line-diags-request
-# a client gone, its lists will never come (nor the pickers', below)
+# a client gone, its lists will never come (nor the pickers', see
+# rc/workspace.kak)
 hook -group kakrc global ClientClose .* %{
 	evaluate-commands %sh{
 		eval set -- "$kak_quoted_opt_line_diags_pending" "$kak_quoted_opt_picker_only"
@@ -636,5 +637,5 @@ hook -group kakrc global WinResize .* %{
 
 # kak-tree-sitter's text objects: <a-i>f, ]f etc. (f function, t type,
 # a argument, T test), and tree navigation (Helix's A-o/A-i...) in its mode,
-# sticky (see syntax tree below)
+# sticky (see syntax tree in rc/editing.kak)
 map global user t ':enter-user-mode -lock tree-sitter<ret>' -docstring 'tree-sitter mode (sticky)'

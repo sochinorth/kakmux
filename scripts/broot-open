@@ -10,7 +10,8 @@
 # Elsewhere in tmux, a kak client in broot's tmux window gets it: the pane
 # focused last if it's one, else the first. Without one, double-click opens
 # kak in a new split to the right, and Enter in broot's own terminal.
-# kakrc labels each kak client's tmux pane with @kak_session/@kak_client.
+# rc/splits.kak labels each kak client's tmux pane with
+# @kak_session/@kak_client.
 file=$1
 
 kq() { printf "'%s'" "$(printf %s "$1" | sed "s/'/''/g")"; }   # kak-quote

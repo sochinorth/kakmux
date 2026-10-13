@@ -2,8 +2,8 @@
 # the git gutter and the workspace root.
 
 # --- pickers for lists ---------------------------------------------------------
-# kak-lsp's lists (above), ripgrep, git: in kak-picker's popup, as
-# `path:line:column:text` lines (bin/kak-picker's "locations").
+# kak-lsp's lists (rc/inline-diagnostics.kak), ripgrep, git: in kak-picker's
+# popup, as `path:line:column:text` lines (bin/kak-picker's "locations").
 
 # picker-locations BUFNAME FILETYPE ROOT LIST: kak-lsp's goto buffer arguments
 # picker_only: "client=file" when the client's last diagnostics-picker was
@@ -296,8 +296,8 @@ define-command -override -hidden -params 3 git-gutter-diff %{
 # that run saw it: git_gutter_seen, and the buffer's timestamp, less
 # TIMESTAMP are 0 then. Flags for an older buffer would lose those of the
 # lines edited since (Kakoune drops a line's flags as it's edited) while
-# typing goes on; those keep theirs (see "decorations through edits"
-# below), and the run the next pause starts brings the rest.
+# typing goes on; those keep theirs (see "decorations through edits" in
+# rc/decorations.kak), and the run the next pause starts brings the rest.
 define-command -override -hidden -params 1.. git-gutter-set %{
 	set-option -remove buffer git_gutter_seen %arg{1}
 	set-option buffer git_gutter_cmp %val{timestamp}

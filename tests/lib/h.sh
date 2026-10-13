@@ -82,6 +82,7 @@ mkcfg() {
 	done
 	sed "s|~/.config/kak|$C|g" "$KM_SRC/kakrc" > "$C/kakrc"
 	for f in "$KM_SRC"/rc/*.kak; do
+		[ -e "$f" ] || continue   # (a checkout from before rc/, for perf-diff)
 		sed "s|~/.config/kak|$C|g" "$f" > "$C/rc/${f##*/}"
 	done
 	sed "s|~/.config/kak|$C|g" "$KM_SRC/kakmux.conf" > "$C/kakmux.conf"

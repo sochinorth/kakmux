@@ -1,6 +1,6 @@
 #!/bin/sh
 # kak-picker KIND DIR SESSION CLIENT PANE: Helix-style fuzzy picker in a tmux
-# popup, for CLIENT of kak SESSION (whose tmux pane is PANE). kakrc's
+# popup, for CLIENT of kak SESSION (whose tmux pane is PANE). rc/pickers.kak's
 # picker-open fills DIR with the colour scheme's faces (DIR/faces, from
 # :debug faces) and, for KIND=buffers, the buffers themselves (N.name,
 # N.meta = cursor line + modified, N = contents). DIR is removed on exit.
@@ -11,11 +11,12 @@
 #   KIND=locations          a list of `path:line:column:text` lines: DIR/list,
 #                           paths from DIR/root, DIR/type = kak-lsp's kind of
 #                           list (lsp-goto, lsp-diagnostics, ...), DIR/title,
-#                           DIR/only = just this file's (all from kakrc)
+#                           DIR/only = just this file's (all from rc/)
 #   KIND=grep               ripgrep under the cwd, as you type
 #   KIND=workspace-symbols  the language server's symbols, as you type
 #   KIND=changed            files changed since HEAD (git status)
-#   KIND=commands           every command and mapping (kakrc's command-palette)
+#   KIND=commands           every command and mapping (rc/pickers.kak's
+#                           command-palette)
 # Paths show from DIR/wsroot (the buffer's workspace root) when under it.
 #
 #   enter          open it
@@ -26,8 +27,8 @@
 #
 # On closing, DIR (less the buffers' copies) is kept at the path in DIR/last
 # (one per session), with what was typed (query) and the cursor's place
-# (pos): kakrc's picker-resume (<space>') opens it again from there, the
-# list as it was for kak-lsp's lists, made afresh for the others.
+# (pos): rc/pickers.kak's picker-resume (<space>') opens it again from
+# there, the list as it was for kak-lsp's lists, made afresh for the others.
 #
 # Columns are as wide as the widest of what's on screen: fzf runs --layout
 # as the list or the window changes, and the list is laid out again when
@@ -233,7 +234,7 @@ case $1 in
 	out=$dir/wsym.$$
 	rm -f -- "$out" "$out.root"
 	send "evaluate-commands -client $client $(kq "set-option window picker_wsym_out $(kq "$out"); lsp-workspace-symbol $(kq "$5")")"
-	# the answer comes back through kakrc's picker-wsym-deliver
+	# the answer comes back through picker-wsym-deliver (rc/workspace.kak)
 	i=0
 	while [ ! -e "$out" ] && [ "$i" -lt 60 ]; do sleep 0.05; i=$((i + 1)); done
 	[ -e "$out" ] || exit 0
@@ -255,14 +256,15 @@ case $1 in
 	fi
 	exit ;;
 --parse)    # CONFIG RUNTIME PLUGINRC: kak commands that cache the command
-            # palette's list (kakrc's palette-load), from the files that
-            # define commands: Kakoune's own (its docs), the autoloaded
-            # scripts, the plugins' (PLUGINRC, as they loaded) and the kakrc
+            # palette's list (rc/pickers.kak's palette-load), from the
+            # files that define commands: Kakoune's own (its docs), the
+            # autoloaded scripts, the plugins' (PLUGINRC, as they loaded),
+            # the kakrc and rc/
 	config=$2 runtime=$3
 	auto=$config/autoload; [ -d "$auto" ] || auto=$runtime/autoload
 	nl=$(printf '\nx'); nl=${nl%x}
 	IFS=$nl
-	set -- "$runtime/doc/commands.asciidoc" $(find -L "$auto" -type f -name '*.kak' 2>/dev/null | sort) "$4" "$config/kakrc"
+	set -- "$runtime/doc/commands.asciidoc" $(find -L "$auto" -type f -name '*.kak' 2>/dev/null | sort) "$4" "$config/kakrc" "$config"/rc/*.kak
 	unset IFS
 	LC_ALL=C awk '
 	function q(t) { gsub(/\047/, "\047\047", t); return "\047" t "\047" }
@@ -469,7 +471,7 @@ trap 'exit 1' HUP INT TERM
 # A face line reads ` * Name: fg,bg,underline[+attrs]`; the last one for a
 # face counts. Colours left at "default" fall back down the chain:
 # MenuBackground -> Default -> terminal. These helpers set $v.
-# PickerBackground (kakrc's own face; colour schemes may set it) is the
+# PickerBackground (rc/base.kak's own face; colour schemes may set it) is the
 # list's and preview's background, a shade off the editor's so the popup
 # reads as one with it; without it, MenuBackground's.
 

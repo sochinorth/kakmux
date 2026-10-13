@@ -9,7 +9,8 @@ panes are kak's splits; `kakbr` puts a broot sidebar beside it.
 
 | Path | What it is | Deployed as |
 | --- | --- | --- |
-| `kakrc` | The config: a port of Helix's `config.toml`/`languages.toml`, safe to `:config-reload` | `~/.config/kak/kakrc` |
+| `kakrc` | The config: a port of Helix's `config.toml`/`languages.toml`, safe to `:config-reload`; sources `rc/` in order | `~/.config/kak/kakrc` |
+| `rc/*.kak` | Its parts (base, editor, lsp, inline-diagnostics, workspace, keys, editing, decorations, commands, bufferline, pickers, splits, languages) | `~/.config/kak/rc/` |
 | `colors/onedark.kak` | Colour scheme | `~/.config/kak/colors/` |
 | `bin/kak-picker` | fzf pickers in a tmux popup (files, buffers, grep, symbols, diagnostics, palette) | `~/.config/kak/bin/` |
 | `bin/kakmux-even` | Evens out kakmux's splits | `~/.config/kak/bin/` |
@@ -35,7 +36,7 @@ Standalone:
 
 ```sh
 git clone https://github.com/sochinorth/kakmux.git ~/kakmux
-ln -s ~/kakmux ~/.config/kak                     # kakrc, colors/, bin/, kakmux.conf in place
+ln -s ~/kakmux ~/.config/kak                     # kakrc, rc/, colors/, bin/, kakmux.conf in place
 ln -s ~/kakmux/kakbr ~/.config/kakbr
 mkdir -p ~/.local/bin ~/.local/lib/broot-opener
 for f in kakmux kakbr-sidebar broot-open; do ln -s ~/kakmux/scripts/$f ~/.local/bin/; done

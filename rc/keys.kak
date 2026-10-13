@@ -227,7 +227,7 @@ map global insert <s-left>  '<a-;>H'
 
 # --- goto mode (g) -------------------------------------------------------------
 # Kakoune's g, with Helix's letters where they differ: gs the first non-blank
-# (Kakoune's gi; gi is LSP's implementation, above), ge the last line
+# (Kakoune's gi; gi is LSP's implementation, rc/lsp.kak), ge the last line
 # (Kakoune's gj; its ge, the buffer's very end, is now ge then gl), gk/gj a
 # line up/down (Kakoune's gk was gg, its gj is ge), g| a column (prompted).
 # Mapped to Kakoune's own goto keys where there's one, so G extends with
@@ -296,8 +296,8 @@ map global zview r z               -docstring 'restore selections (Kakoune''s z)
 # needs a grammar), p paragraph, <space> a blank line below/above. Kakoune's
 # [ and ] (select to an object's start/end) move to [[ and ]] (then the
 # object key); { } <a-[> <a-]> are unchanged.
-# ]d uses kak-lsp's lsp-find-error: the diagnostic object (above) only works
-# from object mode, which a user mode's keys can't continue into. Its
+# ]d uses kak-lsp's lsp-find-error: the diagnostic object (rc/lsp.kak) only
+# works from object mode, which a user mode's keys can't continue into. Its
 # --previous counts one under the cursor, hence a step left first. Both wrap
 # around at the ends, as Helix's do. ]D [D pick the last/first of the same
 # list themselves (diagnostic-goto, below): lsp-find-error from the buffer's

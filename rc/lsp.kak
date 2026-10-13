@@ -2,7 +2,7 @@
 # actions.
 
 # --- [editor.lsp] / diagnostics -----------------------------------------------
-# kakoune-lsp (loaded at the top), for every filetype it has a server for:
+# kakoune-lsp (loaded in rc/base.kak), for every filetype it has a server for:
 # its lsp_servers hooks (in kak-lsp's servers.kak) pick the server, which must
 # be installed (C/C++: clangd; sh: bash-language-server; markdown: marksman).
 try %{
@@ -20,13 +20,14 @@ try %{
 	# end-of-line-diagnostics: every severity, not just warnings and up
 	# (kak-lsp can't filter them); like Helix, the worst one's message two
 	# spaces after the line, no mark per diagnostic. Drawn by the inline
-	# diagnostics below (which leave out the cursor's line), not kak-lsp.
+	# diagnostics (rc/inline-diagnostics.kak, which leave out the cursor's
+	# line), not kak-lsp.
 	set-option global lsp_inlay_diagnostic_sign ''
 	set-option global lsp_inlay_diagnostic_gap ' '
 	# lsp.display-progress-messages: progress (and pending server messages)
-	# in the status line (see "status line" above). Not the rest of kak-lsp's
-	# modeline: no breadcrumbs (Helix has none, and they're a request
-	# whenever keys stop).
+	# in the status line (see "status line" in rc/editor.kak). Not the rest
+	# of kak-lsp's modeline: no breadcrumbs (Helix has none, and they're a
+	# request whenever keys stop).
 	remove-hooks global lsp-breadcrumbs
 	# clangd keeps its preambles (a PCH per open file) in memory, not as
 	# $TMPDIR/preamble-*.pch: a clangd gone without kak-lsp's shutdown (kak
@@ -45,16 +46,16 @@ try %{
 	set-option global lsp_diagnostic_line_warning_sign '●'
 	set-option global lsp_diagnostic_line_info_sign    '●'
 	set-option global lsp_diagnostic_line_hint_sign    '●'
-	# Helix's keys: g d/D/y/r/i, ]d [d (see [ ] below), <space> k/r/a/h (and
-	# s/S/d/D: pickers). gi is Kakoune's first non-blank, which moves to gs
-	# (see goto mode below).
+	# Helix's keys: g d/D/y/r/i, ]d [d (see [ ] in rc/keys.kak), <space>
+	# k/r/a/h (and s/S/d/D: pickers). gi is Kakoune's first non-blank, which
+	# moves to gs (see goto mode in rc/keys.kak).
 	map global goto d '<esc>:lsp-definition<ret>'      -docstring 'definition (LSP)'
 	map global goto D '<esc>:lsp-declaration<ret>'     -docstring 'declaration (LSP)'
 	map global goto y '<esc>:lsp-type-definition<ret>' -docstring 'type definition (LSP)'
 	map global goto r '<esc>:lsp-references<ret>'      -docstring 'references (LSP)'
 	map global goto i '<esc>:lsp-implementation<ret>'  -docstring 'implementation (LSP)'
 	# a diagnostic as an object: ]]d [[d select to the next/previous one,
-	# shift-] shift-[ d extend to it (]d [d jump: see [ and ] below)
+	# shift-] shift-[ d extend to it (]d [d jump: see [ and ] in rc/keys.kak)
 	map global object d '<a-;>lsp-diagnostic-object error warning info hint<ret>' -docstring 'diagnostic (LSP)'
 	map global user k ':lsp-hover<ret>'                -docstring 'hover (LSP)'
 	map global user r ':lsp-rename-prompt<ret>'        -docstring 'rename (LSP)'

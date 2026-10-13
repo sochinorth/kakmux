@@ -97,7 +97,7 @@ set-face global SecondarySelection "default,%opt{lblack}"
 set-face global PrimaryCursor      "%opt{black},%opt{white}+fg"
 set-face global SecondaryCursor    "%opt{black},%opt{lgray}+fg"
 # (not final at the end of a line: the inline diagnostics' lines below
-# the cursor's line, see kakrc, count as under it there)
+# the cursor's line, see rc/inline-diagnostics.kak, count as under it there)
 set-face global PrimaryCursorEol   "%opt{black},%opt{blue}"
 set-face global SecondaryCursorEol "%opt{black},%opt{lgray}"
 set-face global LineNumbers        "%opt{linenr},%opt{black}"
@@ -121,8 +121,9 @@ set-face global InlayDiagnosticError   "%opt{red}+b"
 set-face global InlayDiagnosticWarning "%opt{yellow}+b"
 set-face global InlayDiagnosticInfo    "%opt{blue}+b"
 set-face global InlayDiagnosticHint    "%opt{green}+b"
-# the inline diagnostics' lines below the cursor's (kakrc): final, so the
-# cursor and selections there leave them be
+# the inline diagnostics' lines below the cursor's
+# (rc/inline-diagnostics.kak): final, so the cursor and selections there
+# leave them be
 set-face global InlineDiagnosticDefault "%opt{white},%opt{black}+F"
 set-face global InlineDiagnosticError   "%opt{red},%opt{black}+bF"
 set-face global InlineDiagnosticWarning "%opt{yellow},%opt{black}+bF"

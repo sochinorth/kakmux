@@ -188,9 +188,9 @@ map global user F ':file-picker -cwd<ret>' -docstring "file picker (kak's cwd)"
 # that isn't just a command's key. Enter runs it; a command that needs
 # arguments opens the prompt with its name typed. The commands are read
 # from the scripts that define them (bin/kak-picker --parse: Kakoune's docs,
-# the autoloaded scripts, the plugins' as they loaded, this kakrc), once,
-# and each time those that exist just then are kept (modules load later:
-# a command exists if an alias to it can be made). Mappings come from
+# the autoloaded scripts, the plugins' as they loaded, the kakrc and rc/),
+# once, and each time those that exist just then are kept (modules load
+# later: a command exists if an alias to it can be made). Mappings come from
 # :debug mappings, which, like :debug faces, is dumped once and cached.
 # Both are read again after :config-reload.
 # (The plugins' scripts go to the parser in a file: an environment

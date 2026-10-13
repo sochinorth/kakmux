@@ -1,8 +1,8 @@
 # rc/editor.kak, sourced by kakrc: [editor], the status line.
 
 # --- [editor] ----------------------------------------------------------------
-# bufferline = "multiple": drawn in tmux's status line, see the bufferline
-# section below and ~/.local/bin/kakmux.
+# bufferline = "multiple": drawn in tmux's status line, see
+# rc/bufferline.kak and ~/.local/bin/kakmux.
 # preview-completion-insert = false: can't be had. False is Helix only
 # showing the candidate picked in the menu until it's accepted; Kakoune's
 # <c-n>/<c-p>, the only keys that pick one (Tab, Enter and arrows never do),
@@ -54,9 +54,9 @@ define-command -override -hidden insert-completers-restore %{
 # focus between clients too, so there tmux says when its terminal is left
 # (kakmux.conf's client-focus-out hook runs auto-save-all); elsewhere it's
 # kak's FocusOut. A picker's tmux popup takes the focus too, but that isn't
-# leaving the editor (see picker_clients below); under kakbr, moving to broot
-# is. A write that fails (read-only file, gone directory) says so: why in
-# *debug*, that it did in the focused client.
+# leaving the editor (see picker_clients in rc/pickers.kak); under kakbr,
+# moving to broot is. A write that fails (read-only file, gone directory)
+# says so: why in *debug*, that it did in the focused client.
 define-command -override -hidden auto-save-all %{
 	try %{ write-all } catch %{
 		echo -debug "auto-save: %val{error}"
@@ -80,10 +80,10 @@ hook -group kakrc global FocusOut .* %{
 	}
 }
 
-# indent-guides.render = true: see indent guides below (neither tabs nor
-# show-whitespaces' own unscoped guides are drawn here). Named, so a change
-# replaces it; the unnamed one an earlier kakrc added (tabs drawn as │)
-# goes on reload.
+# indent-guides.render = true: see indent guides in rc/decorations.kak
+# (neither tabs nor show-whitespaces' own unscoped guides are drawn here).
+# Named, so a change replaces it; the unnamed one an earlier kakrc added
+# (tabs drawn as │) goes on reload.
 try %{ remove-highlighter "global/show-whitespaces_-tab_│_-tabpad_ _-spc_ _-lf_ _-nbsp_⍽" }
 add-highlighter -override global/whitespace show-whitespaces -tab ' ' -tabpad ' ' -spc ' ' -lf ' ' -nbsp '⍽' -indent ''
 
@@ -295,19 +295,19 @@ define-command -override -hidden -params 5 git-status-set %{
 # Under kakmux every split is a client of the same session, so the default
 # status line's " - client@[session]" tail is just noise there: strip it from
 # the global modelinefmt, once, when the first kakmux client connects (a
-# session in kakmux has only those; client-hello, see splits). A no-op once
-# the format is customised.
+# session in kakmux has only those; client-hello, see rc/splits.kak). A no-op
+# once the format is customised.
 declare-option -hidden str modeline_kakmux
 set-option global modeline_kakmux armed
 
 # Helix defaults that Kakoune doesn't turn on by itself. The gutter's columns
-# go right to left in the order they're added: the git gutter (see below)
-# right of the line numbers, diagnostics (kak-lsp, later) left of them.
-# Each is always there, a column wide, as Helix's are: flag-lines is as wide
-# as its widest flag, so each option holds a blank one for line 0 (which
-# no line has, and which Kakoune never drops); kak-lsp's has its own.
-# Else the text moves a column right when a file gets its first change,
-# and back when it has none.
+# go right to left in the order they're added: the git gutter
+# (rc/workspace.kak) right of the line numbers, diagnostics (kak-lsp, later)
+# left of them. Each is always there, a column wide, as Helix's are:
+# flag-lines is as wide as its widest flag, so each option holds a blank one
+# for line 0 (which no line has, and which Kakoune never drops); kak-lsp's
+# has its own. Else the text moves a column right when a file gets its first
+# change, and back when it has none.
 declare-option -hidden line-specs git_gutter_flags
 set-option global git_gutter_flags 0 '0| '
 add-highlighter -override global/git-gutter flag-lines Default git_gutter_flags

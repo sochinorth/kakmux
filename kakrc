@@ -5,9 +5,9 @@
 # end) redoes it all with no errors and nothing twice: commands are
 # redefined (-override), highlighters replaced (-override, so they keep
 # their place), user modes made once, and every hook is in a kakrc group,
-# all of them removed here before they're added again. Options keep their
-# values (the state below: diagnostics, gutter flags, bufferline caches)
-# unless declared with one, which only settings are. The plugins load
+# all of them removed first (rc/base.kak) before they're added again. Options
+# keep their values (the state in rc/: diagnostics, gutter flags, bufferline
+# caches) unless declared with one, which only settings are. The plugins load
 # once: kakrc_loaded, set at the end.
 
 # The config is in rc/ beside this file (%val{config}/rc: ~/.config/kak/rc),
@@ -28,7 +28,7 @@ source "%val{config}/rc/pickers.kak"
 source "%val{config}/rc/splits.kak"
 source "%val{config}/rc/languages.kak"
 
-# Helix's :theme (see typable commands above)
+# Helix's :theme (see rc/commands.kak)
 alias global theme picker-colorscheme
 
 # Helix's :config-reload: this file again, in the running session (see the

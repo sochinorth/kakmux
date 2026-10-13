@@ -65,7 +65,7 @@ define-command -override line-ending -params ..1 -docstring 'line-ending [lf|crl
 }
 complete-command line-ending shell-script-candidates %{ printf 'lf\ncrlf\n' }
 # indent-style [t|1-8]: tabs, or that many spaces (and it stays: see
-# indentation above)
+# indentation in rc/languages.kak)
 define-command -override indent-style -params ..1 -docstring 'indent-style [t|1-8]: show or set the buffer''s indentation, tabs or spaces (Helix :indent-style)' %{
 	evaluate-commands %sh{
 		case $1 in

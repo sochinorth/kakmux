@@ -16,7 +16,7 @@ declare-option -hidden str-list bufferline_key
 # Colours: the faces BufferLineActive and BufferLineInactive (which also fills
 # the rest of the line), or for colour schemes without them, MenuForeground
 # (as the pickers' selected row) and StatusLine. Turned into tmux styles once
-# per colour scheme, from the faces dump (see pickers below).
+# per colour scheme, from the faces dump (see rc/pickers.kak).
 declare-option -hidden str bufferline_active
 declare-option -hidden str bufferline_inactive
 
@@ -141,7 +141,7 @@ define-command -override -hidden bufferline-send %{
 # Idle hooks catch every change (new/closed buffer, switch, first edit, save)
 # once keys stop; FocusIn catches changes another client made. Only for
 # kakmux clients: kakmux_clients lists them (as each connects, client-hello
-# in splits below), and the check is without a shell (the client, less
+# in rc/splits.kak), and the check is without a shell (the client, less
 # those, is nothing).
 declare-option -hidden str-list kakmux_clients
 declare-option -hidden str-list kakmux_cmp
