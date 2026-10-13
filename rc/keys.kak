@@ -17,7 +17,7 @@ map global match s ':surround-add<ret>'     -docstring 'surround add'
 map global match r ':surround-replace<ret>' -docstring 'surround replace'
 map global match d ':surround-delete<ret>'  -docstring 'surround delete'
 
-# surround-char KEY: KEY (as on-key names it) to the character, in $k
+# surround_char KEY: KEY (as on-key names it) to the character, in $k
 # (a shell function, prepended to the scripts below)
 declare-option -hidden str surround_sh %{
 	surround_char() {

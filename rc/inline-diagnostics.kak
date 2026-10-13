@@ -56,8 +56,8 @@ declare-option -hidden int line_diags_at
 declare-option -hidden str-list line_diags_pending
 declare-option -hidden str-list line_diags_dcols
 declare-option -hidden int line_diags_eolcol
-# window: the cursor's line, and what the drawing was for (size, git gutter
-# column, line count: see WinResize below)
+# window: the cursor's line, and what the drawing was for (size, line
+# count: see WinResize below)
 declare-option -hidden str line_diags_text
 declare-option -hidden str line_diags_size
 declare-option -hidden str-list line_diags_cmp
@@ -147,7 +147,6 @@ declare-option -hidden str line_diags_sh %{
 			[ "${e%%|*}" = "$cur" ] || continue
 			e=${e#*|} sev=${e#*|} sev=${sev%%|*}
 			case $show in *" $sev "*) ;; *) continue ;; esac
-			# insert by column, descending
 			i=$n
 			while [ "$i" -gt 0 ]; do
 				eval "pc=\$col_$((i - 1))"

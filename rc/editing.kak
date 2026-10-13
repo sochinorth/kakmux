@@ -34,7 +34,7 @@ define-command -override -hidden ts-expand %{
 define-command -override -hidden ts-shrink %{
 	try %{ ts-has-tree } catch %{ lsp-selection-range-select down }
 	evaluate-commands %sh{
-		# lo/hi DESC: a selection's first and last positions, as line*2^20+col
+		# lohi DESC: a selection's first and last positions, as line*2^20+col
 		key() { echo $(( ${1%.*} * 1048576 + ${1#*.} )); }
 		lohi() {
 			a=$(key "${1%,*}") b=$(key "${1#*,}")
