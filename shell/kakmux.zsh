@@ -38,28 +38,32 @@ kakbr() {
 	fi
 
 	# kakbr's tmux server, and the session of the kak in it
-	local session=kakbr-$$ ids
+	local session=kakbr-$$ ids side
 	local -a t=(env -u TMUX -u TMUX_PANE tmux -L $session -f ~/.config/kakbr/kakbr.conf)
 	# at this terminal's size (not tmux's default), so broot's width (25%,
 	# within 24..40 columns: kakbr.conf, kakbr-sidebar) is right from the start
 	local -a size=($(stty size 2>/dev/null)) dims
 	(( $#size == 2 )) && dims=(-x $size[2] -y $size[1])
-	ids=("${(@f)$($t new-session -d -s $session -n ${root:t} -c $root $dims \
-		-P -F $'#{session_id}\n#{pane_id}\n#{socket_path}' \
-		-- env KAKBR_SESSION=$session ~/.local/bin/kakbr-sidebar)}") || return
-	$t set-option -p -t $ids[2] @kakbr_sidebar 1
-	# nested in another tmux: at the edges, <c-w> moves on there
-	[[ -n $TMUX ]] && $t set-option -t $ids[1] @outer_pane "${TMUX%%,*} $TMUX_PANE"
-	# kak: a kakmux beside broot; when it ends, so does kakbr
-	local q=\' kak
+	# kak: a kakmux; when it ends, so does kakbr
+	local q=\'
 	local -a args=(-s $session)
 	# opened with :edit (not as an argument) to show it relative to the cwd
 	[[ -n $file ]] && args+=(-e "edit -- $q${file//$q/$q$q}$q")
-	kak=$($t split-window -h -t $ids[2] -c $root -P -F '#{pane_id}' -- \
-		sh -c '"$@"; tmux kill-session -t "$TMUX_PANE"' sh ~/.local/bin/kakmux $args) || return
+	ids=("${(@f)$($t new-session -d -s $session -n ${root:t} -c $root $dims \
+		-P -F $'#{session_id}\n#{pane_id}\n#{socket_path}' \
+		-- sh -c '"$@"; tmux kill-session -t "$TMUX_PANE"' sh ~/.local/bin/kakmux $args)}") || return
+	# broot left of it, born at its width: a resize while broot starts
+	# (between reading its size and handling SIGWINCH) is lost on it, and it
+	# keeps drawing at the size it read, garbled
+	side=$($t split-window -h -b -d -t $ids[2] -c $root \
+		-l $($t display-message -p -t $ids[2] '#{E:@kakbr_width}') -P -F '#{pane_id}' \
+		-- env KAKBR_SESSION=$session ~/.local/bin/kakbr-sidebar) || return
+	$t set-option -p -t $side @kakbr_sidebar 1
+	# nested in another tmux: at the edges, <c-w> moves on there
+	[[ -n $TMUX ]] && $t set-option -t $ids[1] @outer_pane "${TMUX%%,*} $TMUX_PANE"
 	# for broot-open and <c-w> q, to focus kak
-	$t set-option -w -t $ids[2] @kakbr_kak $kak
-	[[ -n $file ]] || $t select-pane -t $ids[2]
+	$t set-option -w -t $side @kakbr_kak $ids[2]
+	[[ -n $file ]] || $t select-pane -t $side
 
 	# Closing the terminal would otherwise detach, leaving broot and kak
 	# running in the background. (An explicit detach ends it too.) Set once

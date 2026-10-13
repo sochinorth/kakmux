@@ -11,9 +11,9 @@ P=$R/p/proj; mkproj "$P"
 echo kb >> "$R/sessions"; echo kbt >> "$R/sessions"
 S=$R/s/$PFX-tmux-kb K=$PFX-kb
 tb() { TMUX= tmux -S "$S" "$@"; }
-tb -f "$KM_SRC/kakbr/kakbr.conf" new-session -d -s "$K" -x 160 -y 45 -c "$P" -- env KAKBR_SESSION="$K" kakbr-sidebar
+tb -f "$KM_SRC/kakbr/kakbr.conf" new-session -d -s "$K" -x 160 -y 45 -c "$P" -- sh -c '"$@"; tmux kill-session -t "$TMUX_PANE"' sh kakmux -s "$K" main.c
+tb split-window -h -b -d -t "$K".0 -c "$P" -l "$(tb display-message -p -t "$K" '#{E:@kakbr_width}')" -- env KAKBR_SESSION="$K" kakbr-sidebar
 tb set-option -p -t "$K".0 @kakbr_sidebar 1
-tb split-window -h -t "$K".0 -c "$P" -- sh -c '"$@"; tmux kill-session -t "$TMUX_PANE"' sh kakmux -s "$K" main.c
 tb set-option -w -t "$K" @kakbr_kak "$(tb display-message -p -t "$K".1 '#{pane_id}')"
 waitkak kb; sleep 2
 tb select-pane -t "$K".0
