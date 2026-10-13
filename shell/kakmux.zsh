@@ -7,10 +7,11 @@ broot() { PATH=~/.local/lib/broot-opener:$PATH command broot "$@" }
 
 # kak's :kakmux hands its session to a new kakmux and quits; this picks it up
 # in the same terminal (the handoff file names the kakmux's tmux server).
+# Windows' system dirs are left off kak's PATH, as in kakmux (see there).
 kak() {
 	local handoff=${XDG_RUNTIME_DIR:-/tmp}/kakmux-handoff-$$ name
 	rm -f -- $handoff
-	KAKMUX_HANDOFF=$handoff command kak "$@"
+	PATH=${(j.:.)path:#/mnt/?/[Ww][Ii][Nn][Dd][Oo][Ww][Ss](|/*)} KAKMUX_HANDOFF=$handoff command kak "$@"
 	local rc=$?
 	[[ -s $handoff ]] || return $rc
 	name=$(<$handoff); rm -f -- $handoff

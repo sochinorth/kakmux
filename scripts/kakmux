@@ -7,6 +7,16 @@
 # bufferline inside; at its edges, kak's <c-w> h/j/k/l move on to the panes
 # around it (@outer_pane, see split-focus in rc/splits.kak). Inside a
 # kakmux, plain kak.
+# Windows' system dirs (WSL's /mnt/c/Windows/...) are left off kak's PATH:
+# its shell completion (:sh, :pipe) checks every file on PATH, thousands
+# there, each a slow trip to Windows' filesystem (some 0.6 s a time).
+p= IFS=:
+set -f
+for d in $PATH; do
+	case $d in /mnt/?/[Ww][Ii][Nn][Dd][Oo][Ww][Ss] | /mnt/?/[Ww][Ii][Nn][Dd][Oo][Ww][Ss]/*) ;; *) p=${p:+$p:}$d ;; esac
+done
+set +f; unset IFS
+PATH=$p
 case ${TMUX%%,*} in */kakmux-*) exec kak "$@" ;; esac
 
 set -- kak "$@" \; set-option destroy-unattached on
