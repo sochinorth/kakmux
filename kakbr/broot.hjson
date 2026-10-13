@@ -6,9 +6,13 @@
 # +/- line counts follow the root's path on broot's top line, where there's
 # room: in the sidebar's 24..40 columns there rarely is, and broot can't
 # shorten that line; kak's status line beside it shows them instead.
+# Without the kitty keyboard protocol: tmux doesn't speak it, and broot's
+# check for it (a query it waits 2 s for the answer to) made it quit at
+# times, as kak and its language servers started beside it.
 {
 	imports: [
 		../broot/conf.hjson
 	]
 	default_flags: g
+	enable_kitty_keyboard: false
 }
