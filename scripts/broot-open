@@ -6,7 +6,7 @@
 #                (see broot() in shell/kakmux.zsh and kakbr-sidebar), with no terminal
 #
 # kakbr's sidebar (KAKBR_SESSION, its kak session, set): the kak client focused
-# last gets the file, and kak the focus.
+# last gets the file, and kak the focus (broot docked, if it was floated).
 # Elsewhere in tmux, a kak client in broot's tmux window gets it: the pane
 # focused last if it's one, else the first. Without one, double-click opens
 # kak in a new split to the right, and Enter in broot's own terminal.
@@ -29,7 +29,11 @@ open_in() {
 if [ -n "$KAKBR_SESSION" ]; then
 	printf 'run-in-focused-client %s\n' "$(kq "edit -- $(kq "$file")")" |
 		kak -p "$KAKBR_SESSION" || exit
-	exec tmux select-pane -t "$(tmux show-options -wqv @kakbr_kak)"
+	# floated (kakbr/float, <c-w> z): docked first, kak being under it
+	if [ "$(tmux display-message -p -t "$TMUX_PANE" '#{pane_floating_flag}')" = 1 ]; then
+		"${XDG_CONFIG_HOME:-$HOME/.config}/kakbr/float" dock "$TMUX_PANE"
+	fi
+	exec tmux select-pane -t "$(tmux show-options -wqv -t "$TMUX_PANE" @kakbr_kak)"
 fi
 
 if [ -n "$TMUX" ]; then

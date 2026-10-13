@@ -1,7 +1,8 @@
 # kakbr-window: <c-w> in kakbr's broot shows its keys' legend (a popup,
 # kakbr.conf and kakbr/window-keys) at the bottom right of broot's pane;
-# l, → and w move to kak, q quits, any other key (<esc> too) closes it and
-# is dropped, as in kak's own <c-w>, which is still kak's in kak
+# l, → and w move to kak, q quits (z floats broot: kakbr-float), any other
+# key (<esc> too) closes it and is dropped, as in kak's own <c-w>, which is
+# still kak's in kak
 . "$(dirname "$0")/../lib/h.sh"
 need broot
 P=$R/p/proj; mkproj "$P"
@@ -37,10 +38,11 @@ expect "legend shown" "$(legend)" 1
 expect "legend's keys" "$(scr | grep -o -e '│ [^│]*: [^│]*│' | sed 's/  *│$//; s/^│ //')" \
 	"l,<right>: focus kak
 w:         next pane
+z:         float
 q:         quit all"
 # its right edge on broot's, above broot's two last lines
 expect_match "legend at the bottom right" "$(scr | tail -3 | head -1)" "*╰─*─╯│*"
-expect_match "titled" "$(scr | tail -7 | head -1)" "*╭─*window*─╮│*"
+expect_match "titled" "$(scr | tail -8 | head -1)" "*╭─*window*─╮│*"
 expect_match "legend in Information's colours" "$(scr -e | grep 'w: *next pane')" "*171;178;191*44;50;60*w: *next pane*"
 expect "still in broot" "$(active)" 0
 tk l

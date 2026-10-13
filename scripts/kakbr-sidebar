@@ -9,8 +9,9 @@ tmux set-option -w -t "$pane" @kakbr_side "$pane"
 last=
 fit() {
 	set -- $(tmux display-message -p -t "$pane" \
-		'#{pane_width} #{window_width} #{window_panes} #{E:@kakbr_width} #{@kakbr_min} #{@kakbr_max}') || return
+		'#{pane_width} #{window_width} #{window_panes} #{E:@kakbr_width} #{@kakbr_min} #{@kakbr_max} #{pane_floating_flag}') || return
 	w=$1 now="$2 $3"
+	[ "$7" = 0 ] || return                      # floated (kakbr/float): its own size
 	[ "$3" -ge 2 ] || { last=$now; return; }    # alone: nothing to size against
 	if [ "$now" = "$last" ]; then
 		want=$(( w < $5 ? $5 : w > $6 ? $6 : w ))   # by hand: the window is as it was

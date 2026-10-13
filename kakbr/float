@@ -1,0 +1,51 @@
+#!/bin/sh
+# kakbr's broot, floated: <c-w> z (window-keys) lifts the sidebar's pane, the
+# same broot (its dir, selection, filter, panels), out of the layout as a
+# tmux floating pane (break-pane -W) over kak, 90% of the window, in kak's
+# popup colours, and puts it back at its width (docks it). kak has the whole
+# window meanwhile. (A display-popup can't show a pane, and one holding a
+# nested client of this server holds <esc> back: that client waits on its
+# OSC 10/11 queries, which a popup never answers.)
+#   float PANE  floats PANE (focused); @kakbr_float on the window says so
+#   dock PANE   back where it was, at the width it had (kakbr-sidebar's fit
+#               leaves a floating pane alone, and sizes it again if the
+#               window changed meanwhile)
+#   esc PANE    <esc> while floated (kakbr.conf): to broot, and docks when
+#               broot did nothing with it (no filter, panel or input to
+#               clear, no earlier state to go back to): its screen as it
+#               was. broot can't bind <esc> to that itself (its verbs see
+#               no filter or input state).
+pane=$2
+style='fg=#ABB2BF,bg=#2C323C'
+case $1 in
+float)
+	set -- $(tmux display-message -p -t "$pane" '#{pane_width} #{pane_floating_flag}') || exit
+	[ "$2" = 0 ] || exit 0
+	tmux set-option -w -t "$pane" @kakbr_float 1 \; \
+		set-option -p -t "$pane" @kakbr_dock_w "$1" \; \
+		set-option -p -t "$pane" window-style "$style" \; \
+		set-option -p -t "$pane" window-active-style "$style" \; \
+		set-option -p -t "$pane" pane-border-style "$style" \; \
+		set-option -p -t "$pane" pane-active-border-style "$style" \; \
+		break-pane -W -s "$pane" -x 90% -y 90% -X 5% -Y 5%
+	;;
+dock)
+	set -- $(tmux display-message -p -t "$pane" '#{pane_floating_flag} #{@kakbr_dock_w}' 2>/dev/null)
+	[ "$1" = 1 ] || exit 0
+	# join-pane alone puts it back where it was, but at half the window
+	tmux join-pane -s "$pane" \; \
+		resize-pane -t "$pane" -x "$2" \; \
+		set-option -wu -t "$pane" @kakbr_float \; \
+		set-option -pu -t "$pane" window-style \; \
+		set-option -pu -t "$pane" window-active-style \; \
+		set-option -pu -t "$pane" pane-border-style \; \
+		set-option -pu -t "$pane" pane-active-border-style
+	;;
+esc)
+	before=$(tmux capture-pane -ep -t "$pane") || exit
+	tmux send-keys -t "$pane" Escape
+	sleep 0.15
+	[ "$(tmux capture-pane -ep -t "$pane")" = "$before" ] && exec "$0" dock "$pane"
+	;;
+esac
+exit 0

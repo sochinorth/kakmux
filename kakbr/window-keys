@@ -1,16 +1,23 @@
 #!/bin/sh
-# kakbr's <c-w> in broot, in a popup over broot's pane (kakbr.conf, which
-# sizes it to this legend): shows the keys, reads one and does what it says.
-# Any other key (<esc> too) closes it, dropped, as with kak's own <c-w>.
-printf '\033[?25l l,<right>: focus kak\n w:         next pane\n q:         quit all'
+# kakbr's <c-w> in broot (docked, or floated), in a popup over broot's pane
+# (kakbr.conf, which sizes it to this legend): shows the keys, reads one and
+# does what it says. Any other key (<esc> too) closes it, dropped, as with
+# kak's own <c-w>. z floats broot over kak or docks it back (float, beside
+# this; z as kak's <c-w> z zooms a split); floated, l, w and q dock it first.
+pane=$(tmux display-message -p '#{pane_id}')
+float=$(dirname "$0")/float
+if [ "$(tmux display-message -p -t "$pane" '#{pane_floating_flag}')" = 1 ]; then z=dock; else z=float; fi
+printf '\033[?25l l,<right>: focus kak\n w:         next pane\n z:         %s\n q:         quit all' "$z"
 stty raw -echo
 k=$(dd bs=16 count=1 2>/dev/null)
 e=$(printf '\033')
+dock() { [ "$z" = float ] || "$float" dock "$pane"; }
 case $k in
-l | "$e[C" | "${e}OC") tmux select-pane -R ;;
-w) tmux select-pane -t :.+ ;;
+l | "$e[C" | "${e}OC") dock; tmux select-pane -R ;;
+w) dock; tmux select-pane -t :.+ ;;
+z) "$float" "$z" "$pane" ;;
 # kak ends its session (:kill, as :qa), which refuses while buffers are
 # unsaved (kak, focused, shows why); its ending closes the rest
-q) tmux select-pane -R \; run-shell -b "echo 'run-in-focused-client kill' | kak -p '#{session_name}'" ;;
+q) dock; tmux select-pane -R \; run-shell -b "echo 'run-in-focused-client kill' | kak -p '#{session_name}'" ;;
 esac
 exit 0

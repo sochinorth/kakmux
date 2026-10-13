@@ -14,7 +14,7 @@ panes are kak's splits; `kakbr` puts a broot sidebar beside it.
 | `bin/kak-picker` | fzf pickers in a tmux popup (files, buffers, grep, symbols, diagnostics, palette) | `~/.config/kak/bin/` |
 | `bin/kakmux-even` | Evens out kakmux's splits | `~/.config/kak/bin/` |
 | `kakmux.conf` | tmux config of a kakmux server | `~/.config/kak/kakmux.conf` |
-| `kakbr/` | tmux config of a kakbr server, broot config of its sidebar | `~/.config/kakbr/` |
+| `kakbr/` | tmux config of a kakbr server, broot config of its sidebar, the scripts of its `<c-w>` (`window-keys`, `float`) | `~/.config/kakbr/` |
 | `scripts/kakmux` | kak in its own tmux server (`kakmux-PID`) | `~/.local/bin/kakmux` |
 | `scripts/kakbr-sidebar` | kakbr's left pane: broot at the sidebar's width | `~/.local/bin/kakbr-sidebar` |
 | `scripts/broot-open` | broot's Enter and double-click open files in kak | `~/.local/bin/broot-open`, `~/.local/lib/broot-opener/{xdg-open,wslview}` |
