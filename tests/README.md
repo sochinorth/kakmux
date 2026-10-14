@@ -47,8 +47,8 @@ name or with `-a`. With nothing covered, it says so and runs smoke alone.
 
 Tests run 8 at once (a quarter of the CPUs, 1 to 8; `-j N`). Those tagged
 `serial` (`# tags: serial`), whose numbers need the machine otherwise idle
-(CPU use, latency, time taken: `resize-spin`, `jump-labels-time`, perf,
-visual), run after the others, one at a time.
+(latency, time taken: `jump-labels-time`, perf, visual), run after the
+others, one at a time.
 
 ## How it works
 
