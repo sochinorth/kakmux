@@ -148,10 +148,6 @@ or sampled over), and says so.
   slows them rather than failing them; perf and visual tests (and those
   tagged `serial`) are only meaningful alone.
 - `rename-edges`/`rename-failed` wait 20 s for the rename timer (`slow`).
-- `palette` fails now and then, mostly under `-j` (a run in several): the
-  picker's column relayout can settle narrower (`%val{cl…` cut at 37
-  columns rather than 55). That's kak-picker's `--layout`, not the test's
-  timing: waiting longer doesn't change it. Rerun it alone.
 - `accepting connection failed`, `Error while transfering remote messages`
   in `*debug*`: a `kak -p` race, harmless; `dbge` drops them.
 - `<esc>` to kak goes with `esc NAME` (tmux send-keys): a raw `\033` written

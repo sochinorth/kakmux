@@ -380,13 +380,11 @@ fzfst() { curl -s -m 2 --unix-socket "$R/o/fzf.sock" 'http://localhost/?limit=0'
 # its list read and QUERY (default none) searched. Asked twice: a list laid
 # out in columns is laid out again on fzf's result event, by a transform
 # that runs in fzf's event loop, as the answers do, so the second comes once
-# that ran (and the reload it may start). fzf can say it's still reading
-# after such a reload for good: 2 s of that is taken as done.
+# that ran (and the reload it may start, read too).
 fzfready() {
-	waitfor "${2:-10}" _fzfq "${1-}" || { echo "fzfready: no fzf with query '${1-}': $(fzfst '"\(.reading) \(.progress) \(.query)"')" >&2; return 1; }
-	waitfor 2 _fzfis "${1-}"; waitfor 2 _fzfis "${1-}" || _fzfq "${1-}"
+	waitfor "${2:-10}" _fzfis "${1-}" && waitfor "${2:-10}" _fzfis "${1-}" ||
+		{ echo "fzfready: no fzf done with query '${1-}': $(fzfst '"\(.reading) \(.progress) \(.query)"')" >&2; return 1; }
 }
-_fzfq() { [ "$(fzfst '"\(.progress) \(.query)"')" = "100 $1" ]; }
 _fzfis() { [ "$(fzfst '"\(.reading) \(.progress) \(.query)"')" = "false 100 $1" ]; }
 # popwin pickers: popen NAME [QUERY]: up (fzfready), its screen still; ptype
 # NAME TEXT: TEXT typed and searched; pclose NAME KEY: KEY closes it
