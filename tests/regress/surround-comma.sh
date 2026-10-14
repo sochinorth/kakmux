@@ -2,7 +2,7 @@
 # golden
 # covers: rc/keys.kak
 . "$(dirname "$0")/../lib/h.sh"
-CWD=$R WAIT=1 start kakmux k
+CWD=$R start kakmux k
 buf() { rm -f "$R/o/b"; send k "evaluate-commands -draft %{ execute-keys '%'; echo -to-file $R/o/b %val{selection} }"; printf '%s  ' "$(cat "$R/o/b")"; q k '%val{selections_desc}'; }
 setbuf() { send k "edit -scratch *s*; execute-keys '%c$1<esc>'; select $2"; }
 echo "== raw object probes on 'x ,ab, y' cursor on a"

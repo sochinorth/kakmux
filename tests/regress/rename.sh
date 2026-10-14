@@ -4,15 +4,17 @@
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp make cc
 P=$R/p/proj; mkproj "$P"
-CWD=$P WAIT=1 start "${MODE:-kakmux}" r1 main.c
-waitdiags r1 0; sleep 4   # clangd: background index
+CWD=$P start "${MODE:-kakmux}" r1 main.c
+# clangd's background index written (a rename reaches the files not open)
+idx() { [ "$(ls "$P"/.cache/clangd/index 2>/dev/null | grep -c '\.idx$')" -ge 4 ]; }
+waitfor 20 idx || fail "clangd index not written"
 st() { (cd "$P" && git status --short | tr '\n' ' '); }
 bufs() { for f in main.c point.c point.h util.c; do printf '%s: ' $f; rm -f "$R/o/m"; send r1 "try %{ evaluate-commands -buffer $P/$f %{ echo -to-file $R/o/m %val{modified} } } catch %{ echo -to-file $R/o/m closed }"; cat "$R/o/m"; printf ' '; done; }
 expect "before: disk" "$(st)" ""
 expect "before: buffers" "$(bufs)" "main.c: false point.c: closed point.h: closed util.c: closed "
 send r1 "execute-keys gg/point_dist2<ret>"
 send r1 "lsp-rename point_distsq"
-sleep 3
+waitcap r1 'renamed: '
 expect "after rename: disk untouched" "$(st)" ""
 expect "after rename: buffers modified" "$(bufs)" "main.c: true point.c: true point.h: true util.c: true "
 for f in main.c point.c point.h util.c; do

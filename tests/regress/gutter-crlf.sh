@@ -13,13 +13,15 @@ git add a.txt 2>/dev/null; git commit -qm init
 # working tree with CRLF (as autocrlf checkouts on Windows do)
 printf 'one\r\ntwo\r\nthree\r\nfour\r\nfive\r\n' > a.txt
 git status --short 2>/dev/null
-CWD=$G WAIT=2 start kakmux j a.txt
+CWD=$G start kakmux j a.txt
+# (the gutter's first run: nothing changed)
+waitout 10 "'eol:' 'crlf' 'flags:' '1' '0| '" q j 'eol: %opt{eolformat} flags: %opt{git_gutter_flags}'
 q j 'eol: %opt{eolformat} flags: %opt{git_gutter_flags}'
 expect "diff.external not called" "$(cat "$R/o/extdiff" 2>/dev/null)" ""
 echo "temp files left: $(ls "$R"/tmp/kak-git-gutter.*/ 2>/dev/null)"
 echo "== delete the last two lines"
 send j 'execute-keys 4gxJxd'
-sleep 1.5
+waitout 10 "'lines:' '3' 'flags:' '2' '0| ' '3|{GitGutterDelete}▔'" q j 'lines: %val{buf_line_count} flags: %opt{git_gutter_flags}'
 q j 'lines: %val{buf_line_count} flags: %opt{git_gutter_flags}'
 cap j | head -5
 echo "== stale result dropped, current accepted"

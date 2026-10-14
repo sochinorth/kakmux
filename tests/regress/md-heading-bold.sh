@@ -19,7 +19,10 @@ Title
 EOF
 cp "$R/p/t.md" "$R/p/t.txt"
 CWD=$R/p start notmux t t.md
-sleep 1
+# until kak-tree-sitter has highlighted it
+hl() { [ -n "$(qv t '%opt{tree_sitter_hl_ranges}')" ]; }
+waitfor 10 hl || fail "no tree-sitter highlighting"
+cap t > /dev/null
 # line: the text's (letters') attributes, b (bold) or -, and colour, one of
 # each kind (the buffer's lines, past the line numbers' separator)
 attrs() {
@@ -56,6 +59,7 @@ expect "ts: setext -" "$(sed -n 7p "$R/ts")" "7 $red"
 expect "ts: setext =" "$(sed -n 10p "$R/ts")" "10 $red"
 # the same text with Kakoune's markdown highlighter, no tree-sitter
 send t "edit t.txt; require-module markdown; add-highlighter buffer/ ref markdown"
+cap t > /dev/null
 attrs > "$R/kak"
 cat "$R/kak"
 expect "kak: # heading (header)" "$(sed -n 1p "$R/kak")" "1 $red"

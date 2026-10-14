@@ -5,7 +5,7 @@
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp
 mktproj "$R/p/proj"
-CWD=$R/p/proj WAIT=1 start kakmux n t.c
+CWD=$R/p/proj start kakmux n t.c
 waitdiags n 3
 q n 'start: %opt{completers}'
 keys n i

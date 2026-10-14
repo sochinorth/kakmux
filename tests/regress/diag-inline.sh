@@ -4,9 +4,11 @@
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp
 mktproj "$R/p/proj"
-CWD=$R/p/proj WAIT=1 start kakmux a t.c
+CWD=$R/p/proj start kakmux a t.c
 waitdiags a 3 || fail "no diagnostics from clangd"
-sleep 1
+# LD NAME: line_diags_n/state/pending ("5//": all 5 listed, none asked for)
+LD() { qv "$1" '"%opt{line_diags_n}/%opt{line_diags_state}/%opt{line_diags_pending}"'; }
+waitout 10 5// LD a
 cap a | head -10
 q a '%opt{line_diags}'
 expect "debug: no errors" "$(dbge a)" ""

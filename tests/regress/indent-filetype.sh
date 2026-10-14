@@ -4,7 +4,7 @@
 # covers: rc/languages.kak
 . "$(dirname "$0")/../lib/h.sh"
 mktproj "$R/p/proj"
-CWD=$R/p/proj WAIT=2 start kakmux b t.c
+CWD=$R/p/proj start kakmux b t.c
 p() { printf '%s: ' "$1"; q b '%opt{filetype} %opt{tabstop} %opt{indentwidth}'; }
 p start-c
 send b 'set-option buffer filetype cpp'; p c-cpp

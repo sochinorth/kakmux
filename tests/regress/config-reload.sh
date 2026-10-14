@@ -5,23 +5,29 @@
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp
 P=$R/p/proj; mkproj "$P"
-CWD=$P WAIT=1 start "${MODE:-kakmux}" rl main.c
+CWD=$P start "${MODE:-kakmux}" rl main.c
 attach rl
 waitdiags rl 0
 # an error and a gutter change in main.c, a second buffer
 send rl "execute-keys 'gg/return 0<ret>cundefined_x<esc>'"
 send rl "edit point.c; buffer main.c"
 waitdiags rl 1 || fail "no diagnostic"
-sleep 2
+# LD: line_diags_n/state/pending ("1//": the one listed, none asked for);
+# quiet: that too, and no git gutter diff running (their .buf files gone)
+LD() { qv rl '"%opt{line_diags_n}/%opt{line_diags_state}/%opt{line_diags_pending}"'; }
+_nogutter() { ! ls "$R"/tmp/kak-git-gutter.*/*.buf > /dev/null 2>&1; }
+quiet() { waitout 10 "$1//" LD; waitfor 10 _nogutter; idle rl; }
+quiet 1
 events() {
 	send rl "echo -debug MARK-$1"
-	keys rl j; sleep 0.3; keys rl k; sleep 0.3
-	tm rl resize-window -t main -x 150; sleep 0.5; tm rl resize-window -t main -x 160; sleep 0.5
-	keys rl i x Escape; sleep 0.4; keys rl u; sleep 0.3
+	keys rl j; keys rl k
+	# (until kak has the new size)
+	for w in 150 160; do tm rl resize-window -t main -x $w; waitout 5 $w qv rl '%val{window_width}'; idle rl; done
+	keys rl i x Escape; keys rl u
 	send rl "buffer point.c"; send rl "buffer main.c"
 	send rl "evaluate-commands -buffer point.c write"
 	send rl "echo -debug END-$1"
-	sleep 0.5
+	quiet 1
 }
 # hooks that ran (group and event; a first display's WinCreate/WinResize
 # only once, so names, not counts)
@@ -38,7 +44,7 @@ events 0
 hooks 0 > "$R/o/hooks-0"
 state > "$R/o/state-0"
 cap rl > "$R/o/cap-0"
-for i in 1 2 3; do send rl "config-reload"; sleep 1; done
+for i in 1 2 3; do send rl "config-reload"; quiet 1; done
 expect_match "status: reloaded" "$(cap rl | tail -1)" "config reloaded*"
 expect "debug errors after reloads" "$(dbg rl | grep -v '^hook \|^MARK\|^END' | grep -i 'error running\|^error\|fail')" ""
 state > "$R/o/state-1"
@@ -54,7 +60,7 @@ send rl "set-option global debug ''"
 echo "== new diagnostic after reload"
 send rl "execute-keys 'gg/printf<ret>cprintfz<esc>'"
 waitdiags rl 2
-sleep 1
+waitout 10 2// LD
 expect "two errors" "$(qv rl '%opt{line_diags_n}')" 2
-expect_match "inline line drawn" "$(cap rl)" "*└─Call to undeclared function 'printfz'*"
+expectw_match "inline line drawn" "*└─Call to undeclared function 'printfz'*" cap rl
 expect "debug errors at the end" "$(dbg rl | grep -v '^hook \|^MARK\|^END' | grep -i 'error running\|^error')" ""

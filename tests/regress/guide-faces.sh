@@ -17,7 +17,7 @@ ${tab}fi
 EOF
 CWD=$R/p start notmux t t.sh
 send t 'execute-keys 3g; execute-keys gl'
-sleep 1
+cap t > /dev/null
 # line: the foreground colour of each guide on it (the buffer's lines, past
 # the line numbers' separator)
 tm t capture-pane -e -p -t main | head -9 | python3 -c '

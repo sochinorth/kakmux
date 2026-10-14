@@ -2,7 +2,7 @@
 # else the whole text in each
 # covers: rc/keys.kak
 . "$(dirname "$0")/../lib/h.sh"
-CWD=$R WAIT=1 start kakmux w
+CWD=$R start kakmux w
 send w "set-option global clipboard_paste 'cat $R/o/clip'"
 buf() { rm -f "$R/o/b"; send w "evaluate-commands -draft %{ execute-keys '%'; echo -to-file $R/o/b %val{selection} }"; cat -A "$R/o/b" | tr '\n' ' '; }
 setbuf() { send w "edit -scratch *s*; execute-keys '%c$1<esc>'; select $2"; }
