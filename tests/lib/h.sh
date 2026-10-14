@@ -337,8 +337,8 @@ quiet() {
 }
 # kakpid NAME: the session's kak server pid
 kakpid() { pgrep -f "^kak -s $PFX-$1( |\$)" | head -1; }
-# cpu PID: utime+stime ticks
-cputicks() { sed 's/.*) //' "/proc/$1/stat" | awk '{ print $12 + $13 }'; }
+# cputicks PID: utime+stime ticks; fails, printing nothing, once PID is gone
+cputicks() { _ct=$(sed 's/.*) //' "/proc/${1:-none}/stat" 2>/dev/null) && [ -n "$_ct" ] || return 1; echo "$_ct" | awk '{ print $12 + $13 }'; }
 # waitfor TIMEOUT CMD...: until CMD succeeds (polls every 0.05 s)
 waitfor() {
 	_wt=$1; shift; _wn=0

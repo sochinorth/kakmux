@@ -83,9 +83,16 @@ hook -group kakrc global FocusOut .* %{
 # indent-guides.render = true: see indent guides in rc/decorations.kak
 # (neither tabs nor show-whitespaces' own unscoped guides are drawn here).
 # Named, so a change replaces it; the unnamed one an earlier kakrc added
-# (tabs drawn as │) goes on reload.
+# (tabs drawn as │) goes on reload. The newline is left as it is (-lf ''),
+# not drawn as a blank: it looks the same, but Kakoune 2026.05.21's wrap
+# reads past a line's end when that ends in text it didn't take from the
+# buffer and the wrap marker or indent leaves it no room (a window 8 or so
+# columns wide, or a line indented to about the window's width): kak spins
+# or dies (std::length_error). Fixed upstream after 2026.05.21 (mawww/kakoune
+# 1e703893); the line-diagnostic lines (rc/inline-diagnostics.kak) keep
+# within the window for the same reason.
 try %{ remove-highlighter "global/show-whitespaces_-tab_│_-tabpad_ _-spc_ _-lf_ _-nbsp_⍽" }
-add-highlighter -override global/whitespace show-whitespaces -tab ' ' -tabpad ' ' -spc ' ' -lf ' ' -nbsp '⍽' -indent ''
+add-highlighter -override global/whitespace show-whitespaces -tab ' ' -tabpad ' ' -spc ' ' -lf '' -nbsp '⍽' -indent ''
 
 # soft-wrap.enable = true, wrap-indicator = "↪ " (named, see whitespace
 # above: the unnamed one an earlier kakrc added goes)
