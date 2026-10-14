@@ -45,10 +45,10 @@ to `tests/lib/` or `run.sh` runs them all (as `-A`). Only regress and
 features, less the slow ones, are picked this way: perf, visual and kts run by
 name or with `-a`. With nothing covered, it says so and runs smoke alone.
 
-Tests run 8 at once (a quarter of the CPUs, 1 to 8; `-j N`). Those tagged
-`serial` (`# tags: serial`), whose numbers need the machine otherwise idle
-(latency, time taken: `jump-labels-time`, perf, visual), run after the
-others, one at a time.
+Tests run one per CPU at once (up to 32; `-j N`). Those tagged `serial`
+(`# tags: serial`), whose numbers need the machine otherwise idle (latency,
+time taken: `jump-labels-time`, perf, visual), run after the others, one at a
+time.
 
 ## How it works
 

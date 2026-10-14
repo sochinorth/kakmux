@@ -14,7 +14,7 @@
 #   NAME           a test by name (smoke, regress/smoke) or a whole CATEGORY
 #   -u             write the normalised output as the new .expected (golden) file
 #   -k             keep every run dir (default: only the failed ones)
-#   -j N           N tests at once (default a quarter of the CPUs, 1 to 8); the
+#   -j N           N tests at once (default one per CPU, up to 32); the
 #                  tests tagged serial run after them, one at a time
 #   -v             show each test's output as it finishes
 # A test passes when it exits 0 (its own expect/expect_le... assertions) and,
@@ -25,7 +25,7 @@ T=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(dirname "$T")
 ALL=0 UPDATE=0 KEEP=0 VERBOSE=0 NOSLOW=0 REF=
 # (tests wait on kak, tmux and clangd more than they use a CPU)
-JOBS=$(( $(nproc 2>/dev/null || echo 4) / 4 )); [ "$JOBS" -lt 1 ] && JOBS=1; [ "$JOBS" -gt 8 ] && JOBS=8
+JOBS=$(nproc 2>/dev/null || echo 4); [ "$JOBS" -gt 32 ] && JOBS=32
 while getopts aAc:sukj:v o; do
 	case $o in
 	a) ALL=1 ;; A) ALL=2 ;; c) REF=$OPTARG ;; s) NOSLOW=1 ;; u) UPDATE=1 ;; k) KEEP=1 ;; j) JOBS=$OPTARG ;; v) VERBOSE=1 ;;
