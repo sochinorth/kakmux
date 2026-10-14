@@ -17,10 +17,20 @@ P=$R/p/sp; mkdir -p "$P"; printf -- '-Wall\n' > "$P/compile_flags.txt"
 CWD=$P XW=70 XH=24 start tmux sp s.c
 waitdiags sp 10; idle sp
 pid=$(kakpid sp)
-# cpu LABEL: % of one cpu over 2 s (time for a spin to show); fails over 20
+[ -n "$pid" ] || { fail "no kak server"; exit 1; }
+# its pane stays when kak dies, so what kak said last shows
+tm sp set-option -g remain-on-exit on
+# cpu LABEL: % of one cpu over 2 s (time for a spin to show); fails over
+# 20. Once kak is gone or spinning the test stops: nothing after would
+# test anything
 cpu() {
-	a=$(cputicks "$pid") || { fail "$1: kak died"; return; }; sleep 2; b=$(cputicks "$pid") || { fail "$1: kak died"; return; }
+	a=$(cputicks "$pid") && sleep 2 && b=$(cputicks "$pid") || {
+		fail "kak died at $1"
+		tm sp capture-pane -p -t main 2>/dev/null | grep -v '^ *$' | tail -3
+		exit 1
+	}
 	expect_le "$1: cpu %" $(( (b - a) / 2 )) 20
+	[ $(( (b - a) / 2 )) -le 20 ] || { fail "kak spinning at $1"; exit 1; }
 }
 cpu idle
 send sp 'execute-keys 4g'; keys sp j; keys sp k
