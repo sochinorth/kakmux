@@ -6,10 +6,12 @@
 # the file itself (detected as it's opened: tabs or spaces, and how many,
 # over the first 1000 lines), its language's default from languages.toml:
 # indent = { tab-width = 4, unit = "\t" } for C, C++, sh and markdown
-# (Helix's "bash" is Kakoune's "sh"), else Kakoune's global indentwidth and
-# tabstop. All per buffer; indent_width_from/tab_width_from say which one
-# set indentwidth/tabstop, so a language default never overrides the other
-# two, and goes again when the filetype changes to one without it.
+# (Helix's "bash" is Kakoune's "sh"), else the global indentwidth and
+# tabstop (4: tabs are 4 wide unless one of the others says otherwise). All
+# per buffer; indent_width_from/tab_width_from say which one set
+# indentwidth/tabstop, so a language default never overrides the other two,
+# and goes again when the filetype changes to one without it.
+set-option global tabstop 4
 declare-option -hidden str indent_width_from
 declare-option -hidden str tab_width_from
 define-command -override -hidden lang-indent-c nop
