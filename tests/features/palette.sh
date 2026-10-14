@@ -7,24 +7,27 @@
 # (the entry count changes with every command added, here or in a plugin;
 # column widths follow the widest entry on screen, and fzf truncates long
 # docs at different points with them: blank runs squeezed, lines cut at 80)
-pcap() { tm "$1" capture-pane -p -t main:picker 2>/dev/null | sed -E 's#[0-9]+/[0-9]+ │#N/N │#; s/ {2,}/  /g; s/^(.{80}).+/\1…/'; }
+_pcap() { tm "$1" capture-pane -p -t main:picker 2>/dev/null | sed -E 's#[0-9]+/[0-9]+ │#N/N │#; s/ {2,}/  /g; s/^(.{80}).+/\1…/'; }
+pcap() { settle _pcap "$1"; }
+LASTL() { cap pal | grep -v '^ *$' | tail -1; }
 need fzf clangd kak-lsp
 P=$R/p/proj; mkproj "$P"
-CWD=$P WAIT=2 start kakmux pal main.c
-waitdiags pal 0; sleep 1; popwin pal
-WAIT2=${PAL_WAIT:-1.2}
-keys pal Space ?; pcap pal | head -14; pcap pal | tail -2
-pkeys pal 'vsplit'; pcap pal | sed -n 2,6p
-pkeys pal Escape
-keys pal Space ?; pkeys pal 'config-reload'; pkeys pal Enter; sleep 1
-expect_match "config-reload ran" "$(cap pal | grep -v '^ *$' | tail -1)" "config reloaded*"
+CWD=$P start kakmux pal main.c
 popwin pal
-keys pal Space ?; pkeys pal 'lsp-rename '; pcap pal | sed -n 3,5p; pkeys pal Enter; sleep 0.5
-expect_match "lsp-rename-prompt prompts" "$(cap pal | grep -v '^ *$' | tail -1)" "New name: *"
+# palette-slow: that long between keys, typed or not
+[ -n "${PAL_WAIT:-}" ] && WAIT2=$PAL_WAIT
+keys pal Space ?; popen pal; pcap pal | head -14; pcap pal | tail -2
+ptype pal 'vsplit'; pcap pal | sed -n 2,6p;
+pclose pal Escape
+keys pal Space ?; popen pal; ptype pal 'config-reload'; pclose pal Enter
+expectw_match "config-reload ran" "config reloaded*" LASTL
+popwin pal
+keys pal Space ?; popen pal; ptype pal 'lsp-rename '; pcap pal | sed -n 3,5p; pclose pal Enter
+expectw_match "lsp-rename-prompt prompts" "New name: *" LASTL
 keys pal Escape
-keys pal Space ?; pkeys pal 'yank main'; pcap pal | sed -n 3,5p; pkeys pal Enter; sleep 0.5
-expect_match "clipboard-yank -main ran" "$(cap pal | grep -v '^ *$' | tail -1)" "yanked 1 selection(s) to the clipboard*"
-keys pal Space ?; pkeys pal 'surround add'; pcap pal | sed -n 3,5p; pkeys pal Escape
-keys pal Space ?; pkeys pal 'focus left'; pcap pal | sed -n 3,5p; pkeys pal Escape
-keys pal Space ?; pkeys pal 'tree-sitter-nav'; pcap pal | sed -n 3,6p; pkeys pal Escape
-sleep 0.5; dbge pal | grep -v '^Mappings:' | tail -5
+keys pal Space ?; popen pal; ptype pal 'yank main'; pcap pal | sed -n 3,5p; pclose pal Enter
+expectw_match "clipboard-yank -main ran" "yanked 1 selection(s) to the clipboard*" LASTL
+keys pal Space ?; popen pal; ptype pal 'surround add'; pcap pal | sed -n 3,5p; pclose pal Escape
+keys pal Space ?; popen pal; ptype pal 'focus left'; pcap pal | sed -n 3,5p; pclose pal Escape
+keys pal Space ?; popen pal; ptype pal 'tree-sitter-nav'; pcap pal | sed -n 3,6p; pclose pal Escape
+dbge pal | grep -v '^Mappings:' | tail -5

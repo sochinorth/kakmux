@@ -6,15 +6,15 @@
 need fzf fd rg bat clangd kak-lsp
 P=$R/p/proj; mkproj "$P"
 mkdir -p "$P/sub/deep"; echo x > "$P/sub/deep/a.txt"; echo 'point_dist2 here' > "$P/sub/s.txt"
-CWD=$P/sub WAIT=2 start kakmux pk ../main.c
-waitdiags pk 0; sleep 1; popwin pk
-WAIT2=1.2
-keys pk Space f; pcap pk | head -6 | cut -c1-64; pkeys pk 'point.c' Enter
-expect "file picked" "$(qv pk '%val{bufname}')" "$P/point.c"
-keys pk Space F; pcap pk | head -4 | cut -c1-64; pkeys pk Escape
-keys pk Space /; pkeys pk 'point_dist2'; sleep 0.5; pcap pk | head -3 | cut -c1-72; pcap pk | sed -n '4,8p' | cut -c1-72 | sort; pkeys pk Escape
-send pk 'execute-keys ggO<esc>'; send pk 'write'; sleep 1
-keys pk Space g; pcap pk | head -4 | cut -c1-64; pkeys pk Escape
-send pk "buffer ../main.c"; send pk "execute-keys gg/point_dist2<ret>"; sleep 2
-keys pk g r; sleep 2; pcap pk | head -3 | cut -c1-72; pcap pk | sed -n '4,7p' | cut -c1-72 | sort; pkeys pk Escape
-sleep 0.5; dbge pk | tail -5
+CWD=$P/sub start kakmux pk ../main.c
+popwin pk
+keys pk Space f; popen pk; pcap pk | head -6 | cut -c1-64; ptype pk 'point.c'; pclose pk Enter
+expectw "file picked" "$P/point.c" qv pk '%val{bufname}'
+keys pk Space F; popen pk; pcap pk | head -4 | cut -c1-64; pclose pk Escape
+keys pk Space /; popen pk; ptype pk 'point_dist2'; pcap pk | head -3 | cut -c1-72; pcap pk | sed -n '4,8p' | cut -c1-72 | sort; pclose pk Escape
+send pk 'execute-keys ggO<esc>'; send pk 'write'
+keys pk Space g; popen pk; pcap pk | head -4 | cut -c1-64; pclose pk Escape
+send pk "buffer ../main.c"; send pk "execute-keys gg/point_dist2<ret>"
+# (clangd may still be starting: its answer opens the picker)
+keys pk g r; fzfready '' 30; popen pk; pcap pk | head -3 | cut -c1-72; pcap pk | sed -n '4,7p' | cut -c1-72 | sort; pclose pk Escape
+dbge pk | tail -5

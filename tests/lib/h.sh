@@ -366,10 +366,24 @@ shtop() { sort "$KM_SHLOG" | cut -c1-"${W:-100}" | uniq -c | sort -rn | head -"$
 myfzf() { for p in $(pgrep -x fzf); do grep -qzx "KM_RUN_ID=$KM_RUN_ID" "/proc/$p/environ" 2>/dev/null && { echo "$p"; return; }; done; }
 # fzfst [JQ]: the picker's fzf's state (its GET /, through jq), if one is up
 fzfst() { curl -s -m 2 --unix-socket "$R/o/fzf.sock" 'http://localhost/?limit=0' 2>/dev/null | jq -r "${1:-.}" 2>/dev/null; }
-# fzfready [QUERY]: until a picker's fzf is up, its list read and searched,
-# with QUERY typed (default none; 10 s max)
-fzfready() { waitfor 10 _fzfis "${1-}" || echo "fzfready: fzf not ready (${1-}): $(fzfst '"\(.reading) \(.progress) \(.query)"')" >&2; }
+# fzfready [QUERY [SECS]]: until a picker's fzf is up (SECS, default 10),
+# its list read and QUERY (default none) searched. Asked twice: a list laid
+# out in columns is laid out again on fzf's result event, by a transform
+# that runs in fzf's event loop, as the answers do, so the second comes once
+# that ran (and the reload it may start). fzf can say it's still reading
+# after such a reload for good: 2 s of that is taken as done.
+fzfready() {
+	waitfor "${2:-10}" _fzfq "${1-}" || { echo "fzfready: no fzf with query '${1-}': $(fzfst '"\(.reading) \(.progress) \(.query)"')" >&2; return 1; }
+	waitfor 2 _fzfis "${1-}"; waitfor 2 _fzfis "${1-}" || _fzfq "${1-}"
+}
+_fzfq() { [ "$(fzfst '"\(.progress) \(.query)"')" = "100 $1" ]; }
 _fzfis() { [ "$(fzfst '"\(.reading) \(.progress) \(.query)"')" = "false 100 $1" ]; }
+# popwin pickers: popen NAME [QUERY]: up (fzfready), its screen still; ptype
+# NAME TEXT: TEXT typed and searched; pclose NAME KEY: KEY closes it
+# (pickerdone)
+popen() { fzfready "${2-}" && pcap "$1" > /dev/null; }
+ptype() { pkeys "$1" "$2"; popen "$1" "$2"; }
+pclose() { pkeys "$1" "$2"; pickerdone "$1"; }
 # pickerdone NAME: until no picker popup of the run is left (its last
 # command sent to kak), then idle NAME
 pickerdone() { waitfor 10 _nopicker; idle "$1"; }
