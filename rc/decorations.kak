@@ -87,6 +87,11 @@ define-command -override -hidden indent-guides-resized %{
 hook -group kakrc global WinResize .* %{
 	try %{ evaluate-commands -verbatim each-client indent-guides-resized %val{client_list} }
 }
+# kak-tree-sitter taking the buffer on (scoped guides from then on) comes
+# with no key to redraw them after: the same, in each client
+hook -group kakrc global BufSetOption tree_sitter_buf_fifo_path=.+ %{
+	try %{ evaluate-commands -verbatim each-client indent-guides-resized %val{client_list} }
+}
 
 # the visible lines and 30 more each side (for the scopes around them)
 define-command -override -hidden indent-guides-render %{
