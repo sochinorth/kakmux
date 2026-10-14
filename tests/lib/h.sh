@@ -325,6 +325,16 @@ popwin() {
 }
 pcap() { settle tm "$1" capture-pane -p -t main:picker 2>/dev/null; }
 pkeys() { n=$1; shift; tm "$n" send-keys -t main:picker "$@"; pcap "$n" > /dev/null; [ -z "${WAIT2:-}" ] || sleep "$WAIT2"; }
+# quiet [N]: until kak ($pid) has held still for N tenths of a second
+# (default 5; a tick of CPU at most, no new shells; 20 s max): what was set
+# off has run. No kak -p, so nothing added to what perf tests count.
+quiet() {
+	_qn=0 _qk=0 _qc0=$(cputicks "$pid") _qs0=$(shells)
+	while [ $_qn -lt "${1:-5}" ] && [ $_qk -lt 200 ]; do
+		sleep 0.1; _qk=$((_qk + 1)); _qc=$(cputicks "$pid") _qs=$(shells)
+		if [ $((_qc - _qc0)) -gt 1 ] || [ "$_qs" != "$_qs0" ]; then _qc0=$_qc _qs0=$_qs _qn=0; else _qn=$((_qn + 1)); fi
+	done
+}
 # kakpid NAME: the session's kak server pid
 kakpid() { pgrep -f "^kak -s $PFX-$1( |\$)" | head -1; }
 # cpu PID: utime+stime ticks

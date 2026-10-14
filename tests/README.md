@@ -116,7 +116,8 @@ expect "debug" "$(dbge t)" ""             # *debug* less startup noise
 Then `just update-expected thing` for a golden test, and check the
 `.expected` by eye. Helpers (`lib/h.sh`): `start stop send q qv keys term esc cap
 dbg dbge attach attachf popwin pcap pkeys pdirs waitdiags waitfor waitout
-waitcap waitfile panes fzfready fzfst pickerdone sync idle settle alive
+waitcap waitfile panes fzfready fzfst popen ptype pclose pickerdone sync
+idle settle quiet alive
 kakpid cputicks expect expectw expect_match expectw_match expect_le expect_ge
 fail skip need metric shells shtop myfzf nlines`. `attachf` gives a client
 whose terminal input is a fifo (`term NAME '\033[O'` for focus events, keys to
@@ -133,8 +134,11 @@ test waits on by what it checks next: `expectw LABEL WANT CMD...` (expect,
 polling CMD until it prints WANT), `waitout`, `waitcap`, `waitdiags`, `panes`;
 pickers: `fzfready [QUERY]` (every fzf listens on `$R/o/fzf.sock`: up, its
 list read, QUERY searched) and `pickerdone` (the popup gone, what it sent kak
-handled). A `sleep` left in a test is for time that has to pass (an idle
-timer, a debounce), and says so.
+handled); perf tests `quiet` (kak's CPU and shell count still, no `kak -p`
+to count), visual ones `settled` (`lib/visual.sh`: kak-lsp's inline
+diagnostics for the buffer as it is). A `sleep` left in a test is for time
+that has to pass (an idle timer, a debounce, a window something is counted
+or sampled over), and says so.
 
 ## Known flakes and quirks
 
@@ -144,8 +148,10 @@ timer, a debounce), and says so.
   slows them rather than failing them; perf and visual tests (and those
   tagged `serial`) are only meaningful alone.
 - `rename-edges`/`rename-failed` wait 20 s for the rename timer (`slow`).
-- `palette` fails about one run in four: the capture can land before the
-  picker's columns are relaid out for what's on screen. Rerun it alone.
+- `palette` fails now and then, mostly under `-j` (a run in several): the
+  picker's column relayout can settle narrower (`%val{cl…` cut at 37
+  columns rather than 55). That's kak-picker's `--layout`, not the test's
+  timing: waiting longer doesn't change it. Rerun it alone.
 - `accepting connection failed`, `Error while transfering remote messages`
   in `*debug*`: a `kak -p` race, harmless; `dbge` drops them.
 - `<esc>` to kak goes with `esc NAME` (tmux send-keys): a raw `\033` written

@@ -10,12 +10,14 @@ need fzf kak-tree-sitter
 P=$R/p/proj; mkproj "$P"; mkmany "$P"; mkbig "$P/big.c"
 (cd "$P" && git add -A && git commit -qm big)
 awk '/^\treturn x \+ 1;$/ && ++c % 250 == 1 { sub(/1;/, "2;") } { print }' "$P/big.c" > "$P/big.tmp" && mv "$P/big.tmp" "$P/big.c"
-CWD=$P WAIT=1 start kakmux wg main.c
+CWD=$P start kakmux wg main.c
 attachf wg
-sleep 6
 pid=$(kakpid wg)
-pk() { printf "$1" > "$R/o/in-wg"; k=0; until [ -n "$(myfzf)" ] || [ $k -gt 500 ]; do k=$((k + 1)); sleep 0.01; done; sleep 0.7; printf '\033' > "$R/o/in-wg"; sleep 1; }
+quiet 10
+pk() { printf "$1" > "$R/o/in-wg"; k=0; until [ -n "$(myfzf)" ] || [ $k -gt 500 ]; do k=$((k + 1)); sleep 0.01; done; fzfready; printf '\033' > "$R/o/in-wg"; pickerdone wg; }
 WAIT2=0.3
+# the sleeps in a step: the background work it set off running into the
+# next (the race this is about), not waiting for it to end
 do_step() {
 	case $1 in
 	many) i=1; while [ $i -le 60 ]; do send wg "edit many/m$i.c"; i=$((i + 1)); done; sleep 3 ;;

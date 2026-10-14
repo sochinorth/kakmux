@@ -10,13 +10,13 @@
 need clangd kak-lsp
 P=$R/p/edge; mkvproj "$P"
 sed -i '11a\            aaaaaaaa x;' "$P/main.c"; printf '\n' >> "$P/main.c"
-CWD=$P WAIT=1 start kakmux edge main.c
+CWD=$P start kakmux edge main.c
 attachf edge
-waitdiags edge 1; sleep 3
+waitdiags edge 1; settled edge
 t() { # NAME KEYS...: reload, cursor on line 12's end, keys, look once settled
 	name=$1; shift
-	keys edge Escape; send edge 'edit!'; sleep 2.5; send edge 'execute-keys 12ggl'; sleep 1.2
-	tm edge send-keys -t main "$@"; sleep 2.75
+	keys edge Escape; send edge 'edit!'; settled edge; send edge 'execute-keys 12ggl'
+	tm edge send-keys -t main "$@"; settled edge
 	printf 'nop\n' | kak -p "$PFX-edge" 2>/dev/null || fail "$name: kak died"
 	echo "## $name"; cap edge | sed -n 11,14p | cut -c1-70
 }

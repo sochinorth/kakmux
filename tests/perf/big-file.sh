@@ -8,16 +8,16 @@
 need kak-tree-sitter
 P=$R/p/proj; mkproj "$P"; mkbig "$P/big.c"
 (cd "$P" && git add -A && git commit -qm big)
-CWD=$P WAIT=1 start kakmux hl big.c
+CWD=$P start kakmux hl big.c
 attachf hl
-sleep 10
 pid=$(kakpid hl)
+quiet 10
 echo "ts lang: $(qv hl '%opt{tree_sitter_lang}')"
-send hl 'execute-keys 25004g'; sleep 2
-term hl A; sleep 2
+send hl 'execute-keys 25004g'; quiet
+term hl A; quiet
 max=0
 for c in a b c d e; do
-	c0=$(cputicks "$pid"); printf $c > "$R/o/in-hl"; sleep 2.5
+	c0=$(cputicks "$pid"); printf $c > "$R/o/in-hl"; sleep 2.5   # (the key and what it sets off)
 	ms=$(( ($(cputicks "$pid") - c0) * 10 )); [ $ms -gt $max ] && max=$ms
 	echo "key $c: kak cpu $ms ms"
 done

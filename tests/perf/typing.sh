@@ -5,9 +5,10 @@
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp
 P=$R/p/proj; mkproj "$P"
-SHW=1 CWD=$P WAIT=1 start kakmux pt main.c
+SHW=1 CWD=$P start kakmux pt main.c
 attach pt
-waitdiags pt 0; sleep 4
+pid=$(kakpid pt)
+waitdiags pt 0; quiet 10
 # lat CHARS: per char, us from send-keys to the screen changing
 lat() {
 	tot=0 nk=0 max=0
@@ -26,39 +27,39 @@ lat() {
 }
 echo "== 1: general typing, 8 chars on a new line 0.15 s apart, <esc>, 1 s"
 : > "$KM_SHLOG"
-WAIT2=0.15; keys pt g g; keys pt j j j j j j; keys pt o; for c in a b c d e f g h; do keys pt $c; done; keys pt Escape; sleep 1
+WAIT2=0.15; keys pt g g; keys pt j j j j j j; keys pt o; for c in a b c d e f g h; do keys pt $c; done; keys pt Escape
+sleep 1   # the background work they set off, counted too
 metric typing-shells "$(shells)"; shtop
 expect_le "general typing: shells for 8 keys" "$(shells)" 60
-keys pt u; sleep 3
+keys pt u; quiet
 echo "== 2: on a line with an error (inline diagnostics drawn), 8 chars 0.3 s apart"
-send pt "execute-keys 'gg/return 0<ret>cundefined_x<esc>'"; waitdiags pt 1; sleep 1
-send pt "execute-keys 'gg/undefined_x<ret>gl'"; sleep 1
-keys pt a; sleep 1
+send pt "execute-keys 'gg/return 0<ret>cundefined_x<esc>'"; waitdiags pt 1; quiet
+send pt "execute-keys 'gg/undefined_x<ret>gl'"
+keys pt a; quiet
 : > "$KM_SHLOG"
-WAIT2=0.3; for c in a b c d e f g h; do keys pt $c; done; sleep 2
+WAIT2=0.3; for c in a b c d e f g h; do keys pt $c; done; sleep 2   # (counted, as above)
 metric error-line-shells "$(shells)"; shtop
 expect_le "error line: shells for 8 keys" "$(shells)" 50
-keys pt Escape; sleep 1
+keys pt Escape; quiet
 echo "== 3: latency, insert on the error line, 8 chars"
-keys pt a; sleep 1
+keys pt a; quiet
 GAP=0.3 lat abcdefgh insert
-keys pt Escape; sleep 1
+keys pt Escape; quiet
 echo "== 4: normal-mode j/k, 10 keys"
-send pt "execute-keys gk"; sleep 0.5
+send pt "execute-keys gk"; quiet
 : > "$KM_SHLOG"
 GAP=0.3 lat jjjjjkkkkk jk
 metric jk-shells "$(shells)"; shtop 4
 expect_le "j/k: shells for 10 keys" "$(shells)" 15
 echo "== 5: fast burst: 20 chars 20 ms apart on a new line, + 2 s"
-keys pt o; sleep 1
+keys pt o; quiet
 : > "$KM_SHLOG"
-for c in a b c d e f g h i j k l m n o p q r s t; do tm pt send-keys -t main $c; sleep 0.02; done; sleep 2
+for c in a b c d e f g h i j k l m n o p q r s t; do tm pt send-keys -t main $c; sleep 0.02; done; sleep 2   # (counted)
 metric burst-shells "$(shells)"; shtop 4
 expect_le "burst: shells for 20 keys" "$(shells)" 60
 keys pt Escape
 echo "== 6: idle 5 s"
-sleep 2; : > "$KM_SHLOG"
-pid=$(kakpid pt)
+quiet; : > "$KM_SHLOG"
 c0=$(cputicks "$pid"); sleep 5; c1=$(cputicks "$pid")
 metric idle-shells "$(shells)"; metric idle-cpu-ticks $((c1 - c0))
 expect "idle: no shells" "$(shells)" 0

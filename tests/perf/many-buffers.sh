@@ -5,14 +5,15 @@
 # covers: kakrc rc/*.kak
 . "$(dirname "$0")/../lib/h.sh"
 P=$R/p/proj; mkproj "$P"; mkmany "$P"
-SHW=1 CWD=$P WAIT=1 start kakmux pg main.c
+SHW=1 CWD=$P start kakmux pg main.c
 attachf pg
-sleep 4
 pid=$(kakpid pg)
+quiet 10
 cpu() { sed 's/.*) //' "/proc/$pid/stat" | awk '{ print $12 + $13 + $14 + $15 }'; }
 send pg "set-option global debug profile; echo -debug MARK"
 : > "$KM_SHLOG"; c0=$(cpu)
-i=1; while [ $i -le 60 ]; do WAIT2=0.3 send pg "edit many/m$i.c"; i=$((i + 1)); done; sleep 3
+# one every 0.3 s or so, then what they set off (counted)
+i=1; while [ $i -le 60 ]; do WAIT2=0.2 send pg "edit many/m$i.c"; i=$((i + 1)); done; sleep 3
 c1=$(cpu)
 send pg "set-option global debug ''"
 shtop 8
