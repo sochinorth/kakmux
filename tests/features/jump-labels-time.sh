@@ -4,7 +4,7 @@
 . "$(dirname "$0")/../lib/h.sh"
 P=$R/p/jl; mkdir -p "$P"
 for i in $(seq 200); do echo "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron"; done > "$P/big.txt"
-CWD=$P WAIT=2 start kakmux jl3 big.txt
+CWD=$P start kakmux jl3 big.txt
 for i in 1 2 3; do
 	send jl3 "echo -debug T0 %sh{date +%s%N}; jump-labels; echo -debug T1 %sh{date +%s%N}"; keys jl3 Escape
 done

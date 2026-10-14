@@ -14,14 +14,14 @@ tb -f "$KM_SRC/kakbr/kakbr.conf" new-session -d -s "$K" -x 160 -y 45 -c "$P" -- 
 tb split-window -h -b -d -t "$K".0 -c "$P" -l "$(tb display-message -p -t "$K" '#{E:@kakbr_width}')" -- env KAKBR_SESSION="$K" kakbr-sidebar
 tb set-option -p -t "$K".0 @kakbr_sidebar 1
 tb set-option -w -t "$K" @kakbr_kak "$(tb display-message -p -t "$K".1 '#{pane_id}')"
-waitkak kg; sleep 2
+waitkak kg; waitcap kg '👁' 15 "$K".0 || fail "broot not drawn"
 side=$(tb display-message -p -t "$K".0 '#{pane_id}')
 kak=$(tb display-message -p -t "$K".1 '#{pane_id}')
 tb select-pane -t "$side"
 tt() { TMUX= tmux -S "$R/s/$PFX-tmux-kgt" "$@"; }
 tt -f /dev/null new-session -d -s main -x 160 -y 45 -- env TMUX= tmux -S "$S" attach -t "$K"
 tt set-option -g status off
-sleep 1
+waitcap kgt '👁' || fail "client not attached"
 # broot's mark left of NAME in the sidebar ("" if none)
 mark() { tb capture-pane -p -t "$side" | sed -n "s/^ *\([A-Z]\)[^A-Za-z]*[^ ]*  $1 *\$/\1/p; s/^ *[^A-Z]*  $1 *\$/-/p" | head -1; }
 # wait up to 5 s for NAME's mark to be WANT
@@ -44,8 +44,13 @@ expect "new: N" "$(waitmark new.txt N)" N
 # it: the watch would also see whatever else changes under the project
 # (clangd's .cache)
 echo "== a commit: when the focus moves"
-tb send-keys -t "$side" M-w; sleep 0.5
-expect "watch off" "$(tb capture-pane -p -t "$side" | grep -c '👁')" 0
+eyes() { tb capture-pane -p -t "$side" | grep -c '👁'; }
+tb send-keys -t "$side" M-w
+expectw "watch off" 0 eyes
+# (broot's watch stops a while after its eye goes: changes before then
+# still refresh it)
+sleep 0.5
+# (time for a refresh that shouldn't come)
 git -C "$P" add -A; git -C "$P" commit -qm c; sleep 1
 expect "a commit alone: still marked" "$(mark point.h)" M
 tb select-pane -t "$kak"
@@ -55,14 +60,15 @@ echo "== a commit elsewhere: when the terminal comes back"
 echo '/* again */' >> "$P/point.h"
 tb select-pane -t "$side"
 expect "changed (and focus moved): M" "$(waitmark point.h M)" M
+# (as above: time for a refresh that shouldn't come)
 git -C "$P" commit -qam c2; sleep 1
 expect "a commit alone: still marked" "$(mark point.h)" M
 # the terminal reports focus out, then in (focus-events)
-tt send-keys -t main -H 1b 5b 4f; sleep 0.3; tt send-keys -t main -H 1b 5b 49
+tt send-keys -t main -H 1b 5b 4f; tt send-keys -t main -H 1b 5b 49
 expect "focus back: refreshed" "$(waitmark point.h -)" -
 
 echo "== kakbr ends: the socket goes"
 printf 'kill!\n' | kak -p "$K"
 k=0; while tb has-session 2>/dev/null && [ $k -lt 50 ]; do sleep 0.1; k=$((k + 1)); done
-sleep 0.5
-expect "socket gone" "$([ -e "$sock" ] && echo left || echo gone)" gone
+sockgone() { [ -e "$sock" ] && echo left || echo gone; }
+expectw "socket gone" gone sockgone

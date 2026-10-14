@@ -34,7 +34,13 @@ for i in $(seq ${KST_N:-6}); do
 	k=0; while ! tt capture-pane -p -t main | grep -q 'Hit enter' && [ $k -lt 100 ]; do
 		sleep 0.1; k=$((k + 1)); side=$(tb show-options -wv @kakbr_side 2>/dev/null)
 	done
-	sleep 1
+	# until broot's status line sits right above its input line (as it
+	# should; one that missed the resize stays wrapped: 5 s, then the expects)
+	settled() {
+		set -- $(tb display-message -p -t "$side" '#{pane_width} #{pane_height}')
+		[ "$(tt capture-pane -p -t main | cut -c1-"$1" | grep -n 'Hit enter' | cut -d: -f1)" = $(($2 - 1)) ]
+	}
+	waitfor 5 settled
 	set -- $(tb display-message -p -t "$side" '#{pane_width} #{pane_height}')
 	expect "broot at its width" "$1" 25
 	# the screen as the terminal shows it, broot's columns

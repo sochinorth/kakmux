@@ -14,15 +14,22 @@ tb -f "$KM_SRC/kakbr/kakbr.conf" new-session -d -s "$K" -x 160 -y 45 -c "$P" -- 
 tb split-window -h -b -d -t "$K".0 -c "$P" -l "$(tb display-message -p -t "$K" '#{E:@kakbr_width}')" -- env KAKBR_SESSION="$K" kakbr-sidebar
 tb set-option -p -t "$K".0 @kakbr_sidebar 1
 tb set-option -w -t "$K" @kakbr_kak "$(tb display-message -p -t "$K".1 '#{pane_id}')"
-waitkak kf; sleep 2
+waitkak kf; waitcap kf '\? for help' 15 "$K".0 || fail "broot not drawn"
 side=$(tb display-message -p -t "$K".0 '#{pane_id}')
 tb select-pane -t "$side"
 tt() { TMUX= tmux -S "$R/s/$PFX-tmux-kft" "$@"; }
 tt -f /dev/null new-session -d -s main -x 160 -y 45 -- env TMUX= tmux -S "$S" attach -t "$K"
 tt set-option -g status off
-sleep 1
 scr() { tt capture-pane -p -t main "$@"; }
-tk() { tt send-keys -t main "$@"; sleep 0.6; }
+waitcap kft '\? for help' || fail "client not attached"
+# settled: no kakbr/float of this run running (floated, <esc> waits 150 ms
+# to see what broot did with it, then may dock), the screen still
+calm() {
+	for p in $(pgrep -f '/kakbr/float '); do grep -qzx "KM_RUN_ID=$KM_RUN_ID" "/proc/$p/environ" 2>/dev/null && return 1; done
+	return 0
+}
+settled() { waitfor 5 calm; settle scr > /dev/null; }
+tk() { tt send-keys -t main "$@"; settled; }
 # where broot's pane is: "docked WIDTH" (left of kak) or "floated WxH"
 where() {
 	set -- $(tb display-message -p -t "$side" '#{pane_floating_flag} #{pane_width} #{pane_height} #{pane_left}')
@@ -31,19 +38,33 @@ where() {
 tiled() { tb list-panes -t "$K:" -f '#{!:#{pane_floating_flag}}' -F '#{pane_id}' | tr '\n' ' '; }
 active() { tb display-message -p -t "$K:" '#{pane_id}'; }
 popup() { scr | grep -c '┌─* broot ─*┐'; }
+legend() { scr | grep -c "$1"; }
+filtered() { scr | grep -c "$1"'ma '; }
+wpa() { echo "$(where) $(active) $(popup)"; }
 w0=$(tb display-message -p -t "$side" '#{pane_width}')
 kak=$(tb display-message -p -t "$K".1 '#{pane_id}')
+# besc: <esc> to docked broot, until its screen shows it (what else it
+# does: broot takes a while with a lone <esc>, a key sooner can be lost)
+besc() {
+	scr -e > "$R/o/esc0"; tt send-keys -t main Escape
+	waitfor 3 sh -c '[ "$(TMUX= tmux -S "$0" capture-pane -ep -t main)" != "$(cat "$1")" ]' "$R/s/$PFX-tmux-kft" "$R/o/esc0"
+	settled
+}
+floated() { where | grep -q '^floated'; }
+# cwz: <c-w> z, once the legend is up (keys before it go to broot)
+cwz() { tk C-w; waitfor 5 legend 'z: *' > /dev/null; tk z; }
 
 echo "== <c-w> z: floated"
-tk m a; sleep 0.5
+tk m a
+waitcap kft '^ma ' 5
 tk C-w
-expect "legend: z floats" "$(scr | grep -c 'z: *float')" 1
-tk z; sleep 0.5
+expectw "legend: z floats" 1 legend 'z: *float'
+tk z
 # 90% of 160x45, less the border
-expect "floated, 90% of the window" "$(where)" "floated 142x38"
-expect "titled" "$(popup)" 1
+expectw "floated, 90% of the window" "floated 142x38" where
+expectw "titled" 1 popup
 expect "kak alone in the layout, the window's width" "$(tiled)$(tb display-message -p -t "$kak" '#{pane_width}')" "$kak 160"
-expect "the same broot, its filter kept" "$(scr | grep -c '│ma ')" 1
+expectw "the same broot, its filter kept" 1 filtered '│'
 expect "focused" "$(active)" "$side"
 expect_match "in kak's popup colours (border)" "$(scr -e | grep ' broot ')" "*171;178;191*44;50;60*┌*"
 expect_match "in kak's popup colours (inside)" "$(scr -e | grep 'kefile')" "*48;2;44;50;60*kefile*"
@@ -51,69 +72,75 @@ expect_match "in kak's popup colours (inside)" "$(scr -e | grep 'kefile')" "*48;
 # (broot's <esc> clears the filter, then goes back a state: here, to the
 # root selected as it started)
 echo "== <esc>: broot's first, then docks"
-tk Escape
-expect "<esc>: filter cleared, still floated" "$(where) $(scr | grep -c '│ma ')" "floated 142x38 0"
-tk Escape
+# (each: broot's screen changes first, then float esc decides)
+tk Escape; waitfor 5 sh -c '! TMUX= tmux -S "$0" capture-pane -p -t main | grep -q "│ma "' "$R/s/$PFX-tmux-kft"; settled
+expect "<esc>: filter cleared, still floated" "$(where) $(filtered '│')" "floated 142x38 0"
+before=$(scr)
+tk Escape; waitfor 5 sh -c '[ "$(TMUX= tmux -S "$0" capture-pane -p -t main)" != "$1" ]' "$R/s/$PFX-tmux-kft" "$before"; settled
 expect "<esc>: back to broot's first state, still floated" "$(where)" "floated 142x38"
 tk Escape
-expect "<esc> with nothing left: docked, at its width" "$(where)" "docked $w0"
-expect "popup gone" "$(popup)" 0
+expectw "<esc> with nothing left: docked, at its width" "docked $w0" where
+expectw "popup gone" 0 popup
 expect "broot left of kak, focused" "$(tiled)$(active)" "$side $kak $side"
 expect "its own colours again" "$(tb show-options -p -t "$side" window-style)" ""
 tk m a
-expect "docked: a filter" "$(scr | grep -c '^ma ')" 1
-tk Escape
-expect "docked: <esc> is broot's (filter cleared)" "$(where) $(scr | grep -c '^ma ')" "docked $w0 0"
-tk Escape
+expectw "docked: a filter" 1 filtered '^'
+besc
+wf() { echo "$(where) $(filtered '^')"; }
+expectw "docked: <esc> is broot's (filter cleared)" "docked $w0 0" wf
+besc
 expect "docked: <esc> stays docked" "$(where)" "docked $w0"
 
 echo "== <c-w> z twice"
-tk C-w; tk z; sleep 0.5
-expect "floated" "$(where)" "floated 142x38"
+cwz
+expectw "floated" "floated 142x38" where
 tk C-w
-expect "legend: z docks" "$(scr | grep -c 'z: *dock')" 1
+expectw "legend: z docks" 1 legend 'z: *dock'
 expect "legend: z and q only" "$(scr | grep -o -e '│ [^│]*: [^│]*│' | sed 's/  *│$//; s/^│ //' | tr '\n' ',')" "z: dock,q: quit all,"
-tk z; sleep 0.5
-expect "docked" "$(where) $(popup)" "docked $w0 0"
+tk z
+wp() { echo "$(where) $(popup)"; }
+expectw "docked" "docked $w0 0" wp
 expect "broot focused" "$(active)" "$side"
 
 echo "== a width set by hand kept"
-tb resize-pane -t "$side" -x 33; sleep 0.5
-tk C-w; tk z; sleep 0.5
-tk C-w; tk z; sleep 0.5
+tb resize-pane -t "$side" -x 33; settled
+cwz; waitout 5 "floated 142x38" where
+cwz; waitout 5 "docked 33" where
 expect "docked at 33" "$(where)" "docked 33"
-tb resize-pane -t "$side" -x "$w0"; sleep 0.5
+tb resize-pane -t "$side" -x "$w0"; settled
 
 echo "== floated, kak focused (a click on it: select-pane): docked"
-tk C-w; tk z; sleep 0.5
-tb select-pane -t "$kak"; sleep 0.5
-expect "docked, in kak" "$(where) $(active) $(popup)" "docked $w0 $kak 0"
-tb select-pane -t "$side"; sleep 0.3
+cwz; waitout 5 "floated 142x38" where
+tb select-pane -t "$kak"
+expectw "docked, in kak" "docked $w0 $kak 0" wpa
+tb select-pane -t "$side"; settled
 
 echo "== floated, <c-w> l: docked, kak focused"
-tk C-w; tk z; sleep 0.5
-tk C-w; tk l; sleep 0.5
-expect "docked, in kak" "$(where) $(active) $(popup)" "docked $w0 $kak 0"
-tb select-pane -t "$side"; sleep 0.3
+cwz; waitout 5 "floated 142x38" where
+tk C-w; waitfor 5 legend 'z: *' > /dev/null; tk l
+expectw "docked, in kak" "docked $w0 $kak 0" wpa
+tb select-pane -t "$side"; settled
 
 echo "== floated, a file opened: docked, kak has it"
-tk C-w; tk z; sleep 0.5
-tk p o i n t . h; sleep 0.5; tk Enter; sleep 1
-expect "opened" "$(printf 'eval -client client0 %%{ echo -to-file %s %%val{bufname} }\n' "$R/o/buf" | kak -p "$K"; sleep 0.3; cat "$R/o/buf")" point.h
-expect "docked, in kak" "$(where) $(active) $(popup)" "docked $w0 $kak 0"
-tb select-pane -t "$side"; tk Escape
+cwz; waitout 5 "floated 142x38" where
+tk p o i n t . h; waitcap kft 'point\.h' 5; tk Enter
+expectw "opened" point.h qv kf '%val{bufname}'
+expectw "docked, in kak" "docked $w0 $kak 0" wpa
+tb select-pane -t "$side"; settled
+tt send-keys -t main Escape; waitfor 5 sh -c '! TMUX= tmux -S "$0" capture-pane -p -t main | grep -q "^point\.h"' "$R/s/$PFX-tmux-kft"; settled
 
 echo "== the window resized while floated, then after"
-tk C-w; tk z; sleep 0.5
-tt resize-window -t main -x 140; sleep 1
+cwz; waitout 5 "floated 142x38" where
+tt resize-window -t main -x 140
+waitout 5 140 tb display-message -p -t "$K:" '#{window_width}'; settled
 expect "floated still" "$(where | cut -d' ' -f1)" floated
-tk C-w; tk z; sleep 0.5
-expect "docked at the new window's width" "$(where)" "docked 35"
-tt resize-window -t main -x 120; sleep 1
-expect "120 columns: 30, as ever" "$(where)" "docked 30"
+cwz
+expectw "docked at the new window's width" "docked 35" where
+tt resize-window -t main -x 120
+expectw "120 columns: 30, as ever" "docked 30" where
 
 echo "== floated, kak ends: kakbr ends"
-tk C-w; tk z; sleep 0.5
+cwz; waitfor 5 floated
 printf 'kill!\n' | kak -p "$K"
 k=0; while tb has-session 2>/dev/null && [ $k -lt 50 ]; do sleep 0.1; k=$((k + 1)); done
 expect "server gone" "$(tb list-sessions 2>/dev/null | wc -l)" 0

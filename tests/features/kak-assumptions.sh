@@ -5,14 +5,14 @@
 # covers:
 . "$(dirname "$0")/../lib/h.sh"
 mktproj "$R/p/proj"
-CWD=$R/p/proj WAIT=1 start tmux al -n t.c
+CWD=$R/p/proj start tmux al -n t.c
 send al "try %{ alias global pp no-such-cmd; echo -debug A1-ok } catch %{ echo -debug A1-fail %val{error} }"
 send al "try %{ alias global pp edit; echo -debug A2-ok } catch %{ echo -debug A2-fail %val{error} }"
 send al "try %{ alias global pp clang-enable-autocomplete; echo -debug A3-ok } catch %{ echo -debug A3-fail %val{error} }"
 dbg al | grep 'A[0-9]'
 echo "== NormalKey for a mapped <ret>"
 send al "map global normal <ret> ':echo -debug MAPPED<ret>'; hook global NormalKey <ret> %{ echo -debug HOOK %val{hook_param} }"
-keys al Enter; sleep 0.3
+keys al Enter
 dbg al | grep 'MAPPED\|HOOK'
 send al "unmap global normal <ret>"
 echo "== ModeChange"
