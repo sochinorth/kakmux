@@ -1,7 +1,7 @@
 # edge: edits around a line with inline diagnostic lines drawn (dd, J, joins,
 # Enter, o/O, undo, paste, empty line, backspacing it away): kak stays up and
 # the screen settles to the right layout
-# tags: slow
+# tags: slow serial
 # covers: rc/inline-diagnostics.kak rc/decorations.kak
 # timeout: 400
 # golden

@@ -2,6 +2,7 @@
 # kak-tree-sitter's highlight update and the git gutter's diff), a burst, and
 # how soon kak answers after it
 # timeout: 400
+# tags: serial
 # covers: rc/*.kak kakrc
 . "$(dirname "$0")/../lib/h.sh"
 need kak-tree-sitter

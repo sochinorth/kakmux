@@ -1,5 +1,6 @@
 # typing: shells kak starts while typing (general, on a line with inline
 # diagnostics, a fast burst), j/k moves, keystroke latency, idle (0 shells)
+# tags: serial
 # covers: kakrc rc/*.kak
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp

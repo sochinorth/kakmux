@@ -1,4 +1,5 @@
 # jump-labels-time: labelling a full screen of words is quick
+# tags: serial
 # covers: rc/pickers.kak
 . "$(dirname "$0")/../lib/h.sh"
 P=$R/p/jl; mkdir -p "$P"

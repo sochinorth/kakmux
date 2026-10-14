@@ -1,6 +1,7 @@
 # many-buffers: opening 60 buffers one by one: shells, kak CPU and the hooks'
 # time, RSS (some 10 shells and 35 ms of hooks a buffer, most of it the
 # stock rc and plugins: filetype, autorestore, kak-tree-sitter, editorconfig)
+# tags: serial
 # covers: kakrc rc/*.kak
 . "$(dirname "$0")/../lib/h.sh"
 P=$R/p/proj; mkproj "$P"; mkmany "$P"

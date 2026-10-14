@@ -14,7 +14,8 @@
 #   NAME           a test by name (smoke, regress/smoke) or a whole CATEGORY
 #   -u             write the normalised output as the new .expected (golden) file
 #   -k             keep every run dir (default: only the failed ones)
-#   -j N           N tests at once (default 1; timing-sensitive tests may flake)
+#   -j N           N tests at once (default a quarter of the CPUs, 1 to 8); the
+#                  tests tagged serial run after them, one at a time
 #   -v             show each test's output as it finishes
 # A test passes when it exits 0 (its own expect/expect_le... assertions) and,
 # if it has NAME.expected next to it, its normalised output matches that.
@@ -23,11 +24,12 @@ set -u
 T=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(dirname "$T")
 ALL=0 UPDATE=0 KEEP=0 VERBOSE=0 NOSLOW=0 REF=
-JOBS=1
+# (tests wait on kak, tmux and clangd more than they use a CPU)
+JOBS=$(( $(nproc 2>/dev/null || echo 4) / 4 )); [ "$JOBS" -lt 1 ] && JOBS=1; [ "$JOBS" -gt 8 ] && JOBS=8
 while getopts aAc:sukj:v o; do
 	case $o in
 	a) ALL=1 ;; A) ALL=2 ;; c) REF=$OPTARG ;; s) NOSLOW=1 ;; u) UPDATE=1 ;; k) KEEP=1 ;; j) JOBS=$OPTARG ;; v) VERBOSE=1 ;;
-	*) sed -n '2,21p' "$0"; exit 2 ;;
+	*) sed -n '2,22p' "$0"; exit 2 ;;
 	esac
 done
 shift $((OPTIND - 1))
@@ -159,18 +161,24 @@ report() {
 
 trap 'echo interrupted; for p in $(jobs -p); do kill $p 2>/dev/null; done; wait; for i in "$BASE"/*.id; do [ -e "$i" ] && (. "$T/lib/sweep.sh"; km_sweep "$(cat "$i")"); done; exit 130' INT TERM
 
+# tests tagged serial (timing: CPU, latency) run alone, after the others
+par=() ser=()
+for f in "${sel[@]}"; do
+	case " $(tag "$f") " in *" serial "*) ser+=("$f") ;; *) par+=("$f") ;; esac
+done
 if [ "$JOBS" -le 1 ]; then
 	for f in "${sel[@]}"; do one "$f"; report "$f"; done
 else
 	running=0
 	declare -A pidf
-	for f in "${sel[@]}"; do
+	for f in "${par[@]}"; do
 		while [ $running -ge "$JOBS" ]; do
 			wait -n -p fin; running=$((running - 1)); report "${pidf[$fin]}"
 		done
 		one "$f" & pidf[$!]=$f; running=$((running + 1))
 	done
 	while [ $running -gt 0 ]; do wait -n -p fin; running=$((running - 1)); report "${pidf[$fin]}"; done
+	for f in "${ser[@]}"; do one "$f"; report "$f"; done
 fi
 
 n=${#sel[@]}; nf=0; ns=0

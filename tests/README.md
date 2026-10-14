@@ -45,6 +45,11 @@ to `tests/lib/` or `run.sh` runs them all (as `-A`). Only regress and
 features, less the slow ones, are picked this way: perf, visual and kts run by
 name or with `-a`. With nothing covered, it says so and runs smoke alone.
 
+Tests run 8 at once (a quarter of the CPUs, 1 to 8; `-j N`). Those tagged
+`serial` (`# tags: serial`), whose numbers need the machine otherwise idle
+(CPU use, latency, time taken: `resize-spin`, `jump-labels-time`, perf,
+visual), run after the others, one at a time.
+
 ## How it works
 
 `run.sh` runs each test (`sh tests/CAT/NAME.sh`) under `timeout`, with a run
@@ -93,7 +98,7 @@ by `just lint` when installed.
 # tests/features/thing.sh
 # thing: what it checks, in a line or two
 # golden                      (optional: compare the output with thing.expected)
-# tags: slow                  (optional: left out of just test)
+# tags: slow                  (optional: left out of just test; serial: run alone)
 # covers: rc/thing.kak        (what it tests: the files whose changes run it)
 # timeout: 400                (optional, seconds; default 300)
 . "$(dirname "$0")/../lib/h.sh"

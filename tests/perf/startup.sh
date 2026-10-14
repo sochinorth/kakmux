@@ -1,6 +1,7 @@
 # startup: ms from starting kak to its first paint (the status line showing
 # 1:1) in a tmux pane; kak -n and the stock rc alone for scale; kak -c
 # attaching to a running server. Median of N (default 10) each.
+# tags: serial
 # covers: kakrc rc/*.kak
 . "$(dirname "$0")/../lib/h.sh"
 N=${N:-10}

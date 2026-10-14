@@ -1,5 +1,6 @@
 # profile: kak's own time (debug profile: hooks and the commands sent back to
 # it) and CPU, typing 8 chars on a line with an error and moving j/k 10 times
+# tags: serial
 # covers: kakrc rc/*.kak
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp

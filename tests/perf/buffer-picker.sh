@@ -1,4 +1,5 @@
 # buffer-picker: <space>b time to fzf running, 61 buffers open, 6 tries
+# tags: serial
 # covers: rc/pickers.kak bin/kak-picker
 . "$(dirname "$0")/../lib/h.sh"
 need fzf
