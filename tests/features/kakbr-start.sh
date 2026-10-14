@@ -4,6 +4,7 @@
 # alone at the window's width, then sized, broot missed the resize and drew
 # at the old width, its status line wrapped: about 1 start in 3.) Six
 # times: a race.
+# covers: shell/kakmux.zsh kakbr/* scripts/kakbr-sidebar scripts/kakmux
 . "$(dirname "$0")/../lib/h.sh"
 need broot zsh
 P=$R/p/proj; mkproj "$P"

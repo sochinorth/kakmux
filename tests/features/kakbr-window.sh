@@ -3,6 +3,7 @@
 # l, → and w move to kak, q quits (z floats broot: kakbr-float), any other
 # key (<esc> too) closes it and is dropped, as in kak's own <c-w>, which is
 # still kak's in kak
+# covers: kakbr/* scripts/kakbr-sidebar rc/splits.kak
 . "$(dirname "$0")/../lib/h.sh"
 need broot
 P=$R/p/proj; mkproj "$P"

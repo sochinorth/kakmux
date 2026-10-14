@@ -3,6 +3,7 @@
 # them as the focus moves, or comes back to kakbr's terminal (kakbr.conf's
 # select-pane and client-focus-in hooks: :refresh sent to broot's server,
 # kakbr-sidebar's --listen); that server's socket goes with kakbr
+# covers: kakbr/* scripts/kakbr-sidebar
 . "$(dirname "$0")/../lib/h.sh"
 need broot
 P=$R/p/proj; mkproj "$P"

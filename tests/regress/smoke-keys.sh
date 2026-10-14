@@ -1,5 +1,6 @@
 # smoke-keys: surround and clipboard typed key by key; gr's list
 # golden
+# covers: rc/keys.kak rc/workspace.kak rc/pickers.kak bin/kak-picker
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp fzf
 P=$R/p/proj; mkproj "$P"

@@ -3,6 +3,7 @@
 # errors (moves, typing, a burst, background jobs), pickers with it open, 30
 # rounds of switching and typing (kak keeps answering, RSS), temp files
 # tags: slow
+# covers: kakrc rc/*.kak bin/*
 # timeout: 1200
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp fzf fd rg

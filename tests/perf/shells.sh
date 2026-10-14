@@ -1,5 +1,6 @@
 # shells: shells per action, the scenario the numbers were first taken with:
 # normal moves, 8 chars typed, mode changes and selections
+# covers: kakrc rc/*.kak
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp
 P=$R/p/proj; mkproj "$P"

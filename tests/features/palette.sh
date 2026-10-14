@@ -2,6 +2,7 @@
 # one (config-reload, a prompt for lsp-rename, clipboard yank); user mode
 # entries; tree-sitter entries
 # golden
+# covers: rc/*.kak bin/kak-picker
 . "$(dirname "$0")/../lib/h.sh"
 # (the entry count changes with every command added, here or in a plugin;
 # column widths follow the widest entry on screen, and fzf truncates long

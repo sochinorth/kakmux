@@ -1,6 +1,7 @@
 # diag-two-clients: workspace symbols routed to the asking window; an edit in
 # client0 redraws the inline lines in both clients
 # golden
+# covers: rc/inline-diagnostics.kak rc/workspace.kak rc/splits.kak
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp
 mktproj "$R/p/proj"

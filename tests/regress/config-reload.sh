@@ -1,6 +1,7 @@
 # config-reload: :config-reload three times: no errors, the same hooks run
 # for the same events, state kept (diagnostics, gutter, modeline, bufferline),
 # features still work. MODE=tmux|notmux to try other setups.
+# covers: kakrc rc/*.kak colors/* kakmux.conf scripts/kakmux
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp
 P=$R/p/proj; mkproj "$P"

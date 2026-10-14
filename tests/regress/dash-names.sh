@@ -1,6 +1,7 @@
 # dash-names: files named -dash.txt through :vsplit, the pickers' actions and
 # a split's init; changed-file-picker outside a repo; :kakmux when tmux fails
 # golden
+# covers: rc/splits.kak rc/workspace.kak rc/pickers.kak rc/bufferline.kak bin/kak-picker scripts/kakmux
 . "$(dirname "$0")/../lib/h.sh"
 D=$R/p/dash; mkdir -p "$D"; echo dash > "$D/-dash.txt"; echo other > "$D/o.txt"
 CWD=$D WAIT=2 start kakmux l o.txt

@@ -1,6 +1,7 @@
 # diag-picker: <space>d's picker with a client attached: popup handed the
 # list, only= this file; the inline lines stay
 # golden
+# covers: rc/inline-diagnostics.kak rc/workspace.kak rc/pickers.kak bin/kak-picker
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp fzf
 mktproj "$R/p/proj"

@@ -1,4 +1,5 @@
 # explorer-open: <ret> on a file in <space>e's broot opens it in kak (broot-open)
+# covers: rc/pickers.kak scripts/broot-open
 . "$(dirname "$0")/../lib/h.sh"
 need broot
 P=$R/p/proj; mkproj "$P"

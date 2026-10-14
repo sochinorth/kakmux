@@ -1,5 +1,6 @@
 # resize-spin: long wrapped lines with inline diagnostics in narrow, short
 # windows: kak stays alive and idle through resizes and moves
+# covers: rc/inline-diagnostics.kak rc/decorations.kak
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp
 P=$R/p/sp; mkdir -p "$P"; printf -- '-Wall\n' > "$P/compile_flags.txt"

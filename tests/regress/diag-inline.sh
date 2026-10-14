@@ -1,5 +1,6 @@
 # diag-inline: clangd's diagnostics drawn inline at the line ends (t.c: three errors)
 # golden
+# covers: rc/inline-diagnostics.kak rc/lsp.kak
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp
 mktproj "$R/p/proj"

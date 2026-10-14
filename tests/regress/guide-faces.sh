@@ -1,5 +1,6 @@
 # guide-faces: indent guides keep their colour inside strings and heredocs
 # (the syntax highlighter's faces, applied after them, used to recolour them)
+# covers: rc/decorations.kak rc/base.kak colors/*
 . "$(dirname "$0")/../lib/h.sh"
 mkdir -p "$R/p"
 tab=$(printf '\t')

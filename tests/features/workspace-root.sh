@@ -1,6 +1,7 @@
 # workspace-root: per buffer, the nearest .git/.helix dir above it, else
 # kak's cwd (scratch and *debug* buffers: kak's cwd's)
 # golden
+# covers: rc/workspace.kak
 . "$(dirname "$0")/../lib/h.sh"
 P=$R/p/proj; mkproj "$P"
 mkdir -p "$P/sub/deep" "$P/hx/.helix" "$R/p/nows"; echo x > "$P/sub/deep/a.txt"; echo y > "$P/hx/b.txt"; echo z > "$R/p/nows/c.txt"

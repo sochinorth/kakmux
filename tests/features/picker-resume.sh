@@ -1,6 +1,7 @@
 # picker-resume: <space>' reopens the last picker as it was left (query,
 # position), for files, grep, references and buffers; nothing left behind
 # golden
+# covers: rc/pickers.kak rc/workspace.kak bin/kak-picker
 . "$(dirname "$0")/../lib/h.sh"
 need fzf fd rg clangd kak-lsp
 P=$R/p/proj; mkproj "$P"

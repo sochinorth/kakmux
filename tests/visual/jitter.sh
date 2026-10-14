@@ -3,6 +3,7 @@
 # shifts sideways, no ● or git flag drops from an unchanged line, lines don't
 # jump up and back down. The frames: $R/frames (run.sh -k keeps them).
 # tags: slow
+# covers: rc/inline-diagnostics.kak rc/decorations.kak rc/workspace.kak
 # timeout: 400
 . "$(dirname "$0")/../lib/h.sh"
 . "$KM_LIB/visual.sh"

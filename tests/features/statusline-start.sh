@@ -1,6 +1,7 @@
 # statusline-start: the status line from the first frames on (git part, name),
 # and its faces once diagnostics come
 # golden
+# covers: rc/editor.kak colors/*
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp
 P=$R/p/proj; mkproj "$P"

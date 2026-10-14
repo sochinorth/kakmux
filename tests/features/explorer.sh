@@ -1,6 +1,7 @@
 # explorer: <space>e/<space>E open broot beside kak (kakmux, plain tmux), focus
 # it when open; refused without tmux; in kakbr, focus the sidebar
 # golden
+# covers: rc/pickers.kak rc/splits.kak kakbr/* scripts/kakmux
 . "$(dirname "$0")/../lib/h.sh"
 need broot
 P=$R/p/proj; mkproj "$P"

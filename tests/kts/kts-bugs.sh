@@ -6,6 +6,7 @@
 # session of that name gets nothing; a live session sending session_begin
 # again keeps working. Stock kak-tree-sitter fails this test.
 # golden
+# covers: tests/kts/*
 . "$(dirname "$0")/../lib/h.sh"
 need kak-tree-sitter python3
 [ -d "${XDG_DATA_HOME:-$HOME/.local/share}/kak-tree-sitter/grammars" ] || skip "no kak-tree-sitter grammars (ktsctl sync)"

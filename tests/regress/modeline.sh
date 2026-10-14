@@ -1,6 +1,7 @@
 # modeline: kakmux strips the modeline's client@[session] once (bufferline in
 # tmux's status); plain kak keeps it; a customised modelinefmt is left alone
 # golden
+# covers: rc/editor.kak kakmux.conf scripts/kakmux
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp
 mktproj "$R/p/proj"

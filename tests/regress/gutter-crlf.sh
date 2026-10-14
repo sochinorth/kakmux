@@ -1,6 +1,7 @@
 # gutter-crlf: git gutter on a CRLF working tree (autocrlf), deletions at EOF,
 # diff.external never called, stale results dropped; temp dir removed at the end
 # golden
+# covers: rc/workspace.kak
 . "$(dirname "$0")/../lib/h.sh"
 G=$R/p/grepo; mkdir -p "$G"; cd "$G" || exit 1
 git init -q .

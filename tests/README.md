@@ -6,19 +6,21 @@ kak-tree-sitter running. One line per test, PASS / FAIL / SKIP; non-zero exit
 on any failure.
 
 ```sh
-just test                  # regress + features, less the slow ones (~10 min)
+just test                  # the tests covering what changed against HEAD, and smoke
+just test -c trunk         # ... what changed against trunk (a branch's work)
 just test smoke rename     # some tests, by name (or a category: just test regress)
+just test-full             # regress + features, less the slow ones
 just test-all              # everything: + slow, perf, visual, kts
 just perf                  # perf numbers, fail on gross regressions only
 just perf-diff trunk~3     # perf numbers of another revision's config next to these
 just lint                  # sh -n/shellcheck, kakrc loads and reloads clean
 just update-expected NAME  # rewrite NAME's golden file from a run (read the diff)
-bash tests/run.sh -h       # -k keep run dirs, -v show output, -j N in parallel
+bash tests/run.sh -h       # -k keep run dirs, -v show output, -j N at once
 ```
 
 ## Layout
 
-| Dir | What | In `just test` |
+| Dir | What | In `just test-full` |
 | --- | --- | --- |
 | `regress/` | Bugs fixed once: diagnostics routing, gutter, splits, rename, reload, smoke flows | yes (less `slow`) |
 | `features/` | Features end to end: pickers, palette, explorer, jump labels, status line | yes (less `slow`) |
@@ -26,6 +28,22 @@ bash tests/run.sh -h       # -k keep run dirs, -v show output, -j N in parallel
 | `visual/` | Screen sampled while typing (jitter), edits around inline diagnostics | no (slow) |
 | `kts/` | kak-tree-sitter 3.2.2 server bugs, fixed in the patched package | no (`test-all`) |
 | `lib/` | `h.sh` (harness), `fixtures.sh` (projects), `norm.sh`, `frames.py`, shell wrappers, fake tmux | |
+
+## Which tests run
+
+`just test` (`run.sh` with no names) runs the tests that cover what changed
+against HEAD (`git diff HEAD`, untracked files too; `-c REF` against REF),
+and `regress/smoke` always. Each test says what it covers in a header line,
+paths from the repo root, globs allowed:
+
+```sh
+# covers: rc/splits.kak bin/kakmux-even kakmux.conf
+```
+
+A test whose own file (`NAME.sh`, `NAME.expected`) changed runs too; a change
+to `tests/lib/` or `run.sh` runs them all (as `-A`). Only regress and
+features, less the slow ones, are picked this way: perf, visual and kts run by
+name or with `-a`. With nothing covered, it says so and runs smoke alone.
 
 ## How it works
 
@@ -76,6 +94,7 @@ by `just lint` when installed.
 # thing: what it checks, in a line or two
 # golden                      (optional: compare the output with thing.expected)
 # tags: slow                  (optional: left out of just test)
+# covers: rc/thing.kak        (what it tests: the files whose changes run it)
 # timeout: 400                (optional, seconds; default 300)
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp

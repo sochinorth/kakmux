@@ -1,5 +1,6 @@
 # split-weights: :vsplit 30 gives the pair 30/70; split-only resets the weights
 # golden
+# covers: rc/splits.kak bin/kakmux-even kakmux.conf
 . "$(dirname "$0")/../lib/h.sh"
 mktproj "$R/p/proj"
 CWD=$R/p/proj WAIT=2 start kakmux b t.c

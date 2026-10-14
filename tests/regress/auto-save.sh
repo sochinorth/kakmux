@@ -2,6 +2,7 @@
 # between its own splits; a failed write is reported; plain tmux: kak's own
 # FocusOut writes
 # golden
+# covers: rc/editor.kak rc/splits.kak kakmux.conf scripts/kakmux
 . "$(dirname "$0")/../lib/h.sh"
 D=$R/p/as; mkdir -p "$D/sub"; echo one > "$D/a.txt"; echo two > "$D/sub/b.txt"
 CWD=$D WAIT=2 start kakmux r a.txt

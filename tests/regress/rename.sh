@@ -1,5 +1,6 @@
 # rename: lsp-rename edits buffers (opened as needed), not files on disk;
 # undo per buffer gets back the disk text; redo + :write-all builds
+# covers: rc/lsp.kak
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp make cc
 P=$R/p/proj; mkproj "$P"

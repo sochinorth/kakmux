@@ -1,6 +1,7 @@
 # odd-names: git gutter and the changed-files picker with awkward file names
 # (spaces, UTF-8, %, #{}, quotes, apostrophes) and CRLF
 # golden
+# covers: rc/workspace.kak rc/pickers.kak bin/kak-picker
 . "$(dirname "$0")/../lib/h.sh"
 need fzf
 P=$R/p/weird; mkweird "$P"

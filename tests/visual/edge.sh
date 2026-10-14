@@ -2,6 +2,7 @@
 # Enter, o/O, undo, paste, empty line, backspacing it away): kak stays up and
 # the screen settles to the right layout
 # tags: slow
+# covers: rc/inline-diagnostics.kak rc/decorations.kak
 # timeout: 400
 # golden
 . "$(dirname "$0")/../lib/h.sh"

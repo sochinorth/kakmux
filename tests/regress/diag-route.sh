@@ -2,6 +2,7 @@
 # switched while a list is pending, and for buffers clangd answers while hidden;
 # diagnostics-picker without LSP fails cleanly
 # golden
+# covers: rc/inline-diagnostics.kak rc/workspace.kak rc/pickers.kak rc/lsp.kak
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp
 mktproj "$R/p/proj"

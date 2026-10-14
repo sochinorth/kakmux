@@ -1,5 +1,6 @@
 # clipboard-paste: one clipboard line per selection when the counts match,
 # else the whole text in each
+# covers: rc/keys.kak
 . "$(dirname "$0")/../lib/h.sh"
 CWD=$R WAIT=1 start kakmux w
 send w "set-option global clipboard_paste 'cat $R/o/clip'"

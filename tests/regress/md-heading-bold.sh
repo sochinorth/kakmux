@@ -1,6 +1,7 @@
 # md-heading-bold: markdown headings are bold, in their colour: with
 # kak-tree-sitter (ts_markup_heading*) and with Kakoune's own markdown
 # highlighter (header, title)
+# covers: rc/base.kak colors/*
 . "$(dirname "$0")/../lib/h.sh"
 mkdir -p "$R/p"
 cat > "$R/p/t.md" <<'EOF'

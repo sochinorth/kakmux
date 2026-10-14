@@ -2,6 +2,7 @@
 # client's terminal (so popups get them too): pickers, gd/gr, diagnostics,
 # ]d ]g, surround, clipboard, splits and <c-w>, bufferline, auto-save
 # golden
+# covers: kakrc rc/*.kak bin/* kakmux.conf scripts/kakmux
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp fzf fd rg
 P=$R/p/proj; mkproj "$P"

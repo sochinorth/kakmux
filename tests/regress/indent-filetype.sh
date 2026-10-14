@@ -1,6 +1,7 @@
 # indent-filetype: tabstop/indentwidth follow the filetype (tabs kept for the
 # ported filetypes) when a buffer's filetype changes back and forth
 # golden
+# covers: rc/languages.kak
 . "$(dirname "$0")/../lib/h.sh"
 mktproj "$R/p/proj"
 CWD=$R/p/proj WAIT=2 start kakmux b t.c

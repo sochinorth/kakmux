@@ -3,6 +3,7 @@
 # pickers, then 30 rounds of switching and typing; kak must answer after
 # every step. STEPS="..." to run others (see do_step).
 # tags: slow
+# covers: kakrc rc/*.kak bin/*
 # timeout: 1800
 . "$(dirname "$0")/../lib/h.sh"
 need fzf kak-tree-sitter

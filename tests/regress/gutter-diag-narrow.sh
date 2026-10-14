@@ -1,6 +1,7 @@
 # gutter-diag-narrow: a 70-column window: git flag, scope guides and inline
 # diagnostic lines (wrapped, hanging under their column) laid out together
 # golden
+# covers: rc/workspace.kak rc/inline-diagnostics.kak rc/decorations.kak
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp
 W=$R/p/wrepo; mktproj "$W"

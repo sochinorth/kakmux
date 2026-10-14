@@ -1,6 +1,7 @@
 # rename-failed: a rename that fails leaves no buffers behind (20 s timer);
 # a good one through the prompt after it; diagnostics follow; :wa builds
 # tags: slow
+# covers: rc/lsp.kak
 # golden
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp make cc

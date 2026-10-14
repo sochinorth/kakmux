@@ -1,6 +1,7 @@
 # completers: kak-lsp's completer added in insert mode and restored after;
 # a window's own value and later global changes are respected
 # golden
+# covers: rc/editor.kak rc/lsp.kak
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp
 mktproj "$R/p/proj"

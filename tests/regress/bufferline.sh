@@ -1,6 +1,7 @@
 # bufferline: kakmux's tmux status line lists the buffers, the active one and
 # [+] marked, per pane; unfocused splits and terminals dim their status line
 # golden
+# covers: rc/bufferline.kak rc/editor.kak rc/splits.kak kakmux.conf scripts/kakmux colors/*
 . "$(dirname "$0")/../lib/h.sh"
 D=$R/p/m; mkdir -p "$D"; seq 1 40 > "$D/x.txt"; seq 1 40 > "$D/y.txt"; echo z > "$D/z.txt"
 CWD=$D WAIT=2 start kakmux v x.txt y.txt

@@ -1,6 +1,7 @@
 # split-only: <c-w>o / :split-only closes only this session's kak panes;
 # tmux-here acts in the client's own tmux; both refuse without tmux
 # golden
+# covers: rc/splits.kak bin/kakmux-even kakmux.conf
 . "$(dirname "$0")/../lib/h.sh"
 mktproj "$R/p/proj"
 CWD=$R/p/proj WAIT=2 start kakmux b t.c

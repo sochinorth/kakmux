@@ -1,6 +1,7 @@
 # palette-args: entries that need arguments open a prompt; ' searches names
 # exactly; user mappings show (and still do after config-reload)
 # golden
+# covers: rc/*.kak bin/kak-picker
 . "$(dirname "$0")/../lib/h.sh"
 # (the entry count changes with every command added, here or in a plugin;
 # column widths follow the widest entry on screen, and fzf truncates long

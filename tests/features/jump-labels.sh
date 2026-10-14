@@ -1,6 +1,7 @@
 # jump-labels: <ret> labels the words on screen (two letters), picking one
 # selects it, <s-ret> extends; *grep* and lsp lists keep <ret> for the line
 # golden
+# covers: rc/pickers.kak
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp rg
 P=$R/p/proj; mkproj "$P"

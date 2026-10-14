@@ -1,8 +1,12 @@
 # kakmux: tests and checks. See tests/README.md.
 
-# everything but perf and the slow tests (visual, long renames); or the named tests
+# the tests covering what changed against HEAD (and smoke); or the named tests
 test *names:
     bash tests/run.sh {{names}}
+
+# regress and features, less the slow tests (visual, long renames)
+test-full:
+    bash tests/run.sh -A
 
 # every test, perf, visual and kak-tree-sitter's included
 test-all:

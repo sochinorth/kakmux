@@ -2,6 +2,7 @@
 # name, [+], diagnostics, mode names (INS USER GOTO), selection count; it
 # shrinks with the window; detached HEAD shows the hash
 # golden
+# covers: rc/editor.kak rc/workspace.kak
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp
 P=$R/p/proj; mkproj "$P"

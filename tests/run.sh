@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
-# run.sh [-a] [-u] [-k] [-j N] [-v] [NAME|CATEGORY...]: run tests, PASS/FAIL each.
-#   default        regress and features, less the tests tagged slow
+# run.sh [-a|-A] [-c REF] [-s] [-u] [-k] [-j N] [-v] [NAME|CATEGORY...]: run
+# tests, PASS/FAIL each.
+#   default        the tests that cover what changed against HEAD (tracked
+#                  changes and untracked files), and regress/smoke always: a
+#                  test's "# covers:" paths (globs) against the files changed;
+#                  a test changed (NAME.sh, NAME.expected) runs; tests/lib or
+#                  this file changed runs them all (-A). From regress and
+#                  features, less the tests tagged slow.
+#   -c REF         the same against REF (a branch's changes: -c trunk)
+#   -A             all of regress and features, less the tests tagged slow
 #   -a             every category (regress features perf visual kts), slow ones too
 #   -s             leave out the tests tagged slow (with -a or CATEGORY)
 #   NAME           a test by name (smoke, regress/smoke) or a whole CATEGORY
@@ -13,11 +21,13 @@
 # Env: KM_SRC=DIR runs the tests against another checkout's config (perf-diff).
 set -u
 T=$(cd "$(dirname "$0")" && pwd)
-ALL=0 UPDATE=0 KEEP=0 JOBS=1 VERBOSE=0 NOSLOW=0
-while getopts asukj:v o; do
+ROOT=$(dirname "$T")
+ALL=0 UPDATE=0 KEEP=0 VERBOSE=0 NOSLOW=0 REF=
+JOBS=1
+while getopts aAc:sukj:v o; do
 	case $o in
-	a) ALL=1 ;; s) NOSLOW=1 ;; u) UPDATE=1 ;; k) KEEP=1 ;; j) JOBS=$OPTARG ;; v) VERBOSE=1 ;;
-	*) sed -n '2,14p' "$0"; exit 2 ;;
+	a) ALL=1 ;; A) ALL=2 ;; c) REF=$OPTARG ;; s) NOSLOW=1 ;; u) UPDATE=1 ;; k) KEEP=1 ;; j) JOBS=$OPTARG ;; v) VERBOSE=1 ;;
+	*) sed -n '2,21p' "$0"; exit 2 ;;
 	esac
 done
 shift $((OPTIND - 1))
@@ -34,13 +44,54 @@ add() {
 		sel+=("$f")
 	done
 }
+# the default set: regress and features, less slow
+pool() {
+	local f
+	for f in "$T"/regress/*.sh "$T"/features/*.sh; do
+		case " $(tag "$f") " in *" slow "*) ;; *) echo "$f" ;; esac
+	done
+}
+# changed: the files changed against ${REF:-HEAD}, untracked ones too
+changed() {
+	git -C "$ROOT" diff --name-only "${REF:-HEAD}" -- || { echo "run.sh: git diff ${REF:-HEAD} failed" >&2; exit 2; }
+	git -C "$ROOT" ls-files --others --exclude-standard
+}
+# bychange: the tests to run for what changed (the default)
+bychange() {
+	local files f t p pats
+	files=$(changed) || exit 2
+	declare -A want
+	for f in $files; do
+		case $f in
+		tests/lib/*|tests/run.sh) pool; echo "changed: $f (the harness: every test)" >&2; return ;;
+		tests/*/*.sh|tests/*/*.expected) t=$ROOT/${f%.*}.sh; [ -f "$t" ] && want[$t]=1 ;;
+		esac
+	done
+	for t in $(pool); do
+		pats=$(sed -n 's/^# covers: *//p' "$t" | head -1)
+		[ -n "$pats" ] || continue
+		for f in $files; do
+			for p in $pats; do
+				# shellcheck disable=SC2254
+				case $f in $p) want[$t]=1; continue 3 ;; esac
+			done
+		done
+	done
+	echo "changed against ${REF:-HEAD}: $(echo $files | wc -w) files, ${#want[@]} tests cover them" >&2
+	[ ${#want[@]} -eq 0 ] && echo "no test covers the changes: smoke only" >&2
+	want[$T/regress/smoke.sh]=1
+	for t in "${!want[@]}"; do echo "$t"; done | sort
+}
 if [ $# -eq 0 ]; then
 	if [ $ALL = 1 ]; then
 		for c in $CATS; do add "$T/$c"/*.sh; done
+	elif [ $ALL = 2 ]; then
+		# shellcheck disable=SC2046
+		add $(pool)
 	else
-		for f in "$T"/regress/*.sh "$T"/features/*.sh; do
-			case " $(tag "$f") " in *" slow "*) ;; *) add "$f" ;; esac
-		done
+		bc=$(bychange) || exit 2
+		# shellcheck disable=SC2086
+		add $bc
 	fi
 else
 	for a; do
@@ -56,7 +107,7 @@ fi
 
 for t in kak tmux script git; do command -v $t >/dev/null || { echo "missing: $t" >&2; exit 2; }; done
 BASE=$(mktemp -d "${TMPDIR:-/tmp}/kmrun.XXXXXX")
-echo "run dir: $BASE (${#sel[@]} tests, config from ${KM_SRC:-$(dirname "$T")})"
+echo "run dir: $BASE (${#sel[@]} tests, -j $JOBS, config from ${KM_SRC:-$ROOT})"
 
 # one test: writes $BASE/NAME.{out,status,secs}
 one() {
@@ -111,7 +162,7 @@ trap 'echo interrupted; for p in $(jobs -p); do kill $p 2>/dev/null; done; wait;
 if [ "$JOBS" -le 1 ]; then
 	for f in "${sel[@]}"; do one "$f"; report "$f"; done
 else
-	running=0 i=0 done_=0
+	running=0
 	declare -A pidf
 	for f in "${sel[@]}"; do
 		while [ $running -ge "$JOBS" ]; do

@@ -2,6 +2,7 @@
 # kakrc): alias to a missing command fails; a <ret> mapping still fires
 # NormalKey; ModeChange's names for prompts, user modes, counts
 # golden
+# covers:
 . "$(dirname "$0")/../lib/h.sh"
 mktproj "$R/p/proj"
 CWD=$R/p/proj WAIT=1 start tmux al -n t.c

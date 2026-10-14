@@ -3,6 +3,7 @@
 # taking the whole layout; <c-w> z again, <esc> with nothing left to undo,
 # kak focused (a click), <c-w> l or a file opened dock it back at its width
 # (its legend: z and q only); kak ending ends it all
+# covers: kakbr/* scripts/kakbr-sidebar scripts/kakmux rc/splits.kak
 . "$(dirname "$0")/../lib/h.sh"
 need broot
 P=$R/p/proj; mkproj "$P"

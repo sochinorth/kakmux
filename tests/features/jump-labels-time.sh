@@ -1,4 +1,5 @@
 # jump-labels-time: labelling a full screen of words is quick
+# covers: rc/pickers.kak
 . "$(dirname "$0")/../lib/h.sh"
 P=$R/p/jl; mkdir -p "$P"
 for i in $(seq 200); do echo "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron"; done > "$P/big.txt"

@@ -1,6 +1,7 @@
 # symbol-picker: lsp-document-symbol's list (no tmux) and <ret> on it;
 # symbol-picker in tmux leaves t.c's path option untouched
 # golden
+# covers: rc/workspace.kak rc/pickers.kak rc/lsp.kak bin/kak-picker
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp
 mktproj "$R/p/proj"

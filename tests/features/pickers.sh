@@ -1,6 +1,7 @@
 # pickers: <space>f (workspace root) / <space>F (cwd), <space>/ grep,
 # <space>g changed files, gr locations; picking opens the file
 # golden
+# covers: rc/pickers.kak rc/workspace.kak bin/kak-picker
 . "$(dirname "$0")/../lib/h.sh"
 need fzf fd rg bat clangd kak-lsp
 P=$R/p/proj; mkproj "$P"

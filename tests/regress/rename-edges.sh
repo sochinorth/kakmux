@@ -2,6 +2,7 @@
 # mention; a rename that can't happen (buffers it opened closed by the 20 s
 # timer); a workspace edit into an unopened file; a clangd quickfix
 # tags: slow
+# covers: rc/lsp.kak
 # golden
 . "$(dirname "$0")/../lib/h.sh"
 need clangd kak-lsp
