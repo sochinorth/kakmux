@@ -7,6 +7,10 @@ need clangd kak-lsp fzf
 mktproj "$R/p/proj"
 CWD=$R/p/proj start kakmux d t.c
 attach d
+# attaching can move the cursor (to line 9) and so the view, depending on when
+# the window takes the client's size: the cursor in main, on a line with no
+# diagnostic, the view at the top
+send d 'execute-keys gg 7g'
 waitdiags d 3
 # LD NAME: line_diags_n/state/pending ("5//": all 5 listed, none asked for)
 LD() { qv "$1" '"%opt{line_diags_n}/%opt{line_diags_state}/%opt{line_diags_pending}"'; }
