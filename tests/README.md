@@ -115,19 +115,34 @@ expect "debug" "$(dbge t)" ""             # *debug* less startup noise
 
 Then `just update-expected thing` for a golden test, and check the
 `.expected` by eye. Helpers (`lib/h.sh`): `start stop send q qv keys term esc cap
-dbg dbge attach attachf popwin pcap pkeys pdirs waitdiags waitfor alive
-kakpid cputicks expect expect_match expect_le expect_ge fail skip need metric
-shells shtop myfzf nlines`. `attachf` gives a client whose terminal input is a
-fifo (`term NAME '\033[O'` for focus events, keys to popups); `popwin` makes
-pickers open in a tmux window (`pcap`/`pkeys`) instead of a popup.
+dbg dbge attach attachf popwin pcap pkeys pdirs waitdiags waitfor waitout
+waitcap waitfile panes fzfready fzfst pickerdone sync idle settle alive
+kakpid cputicks expect expectw expect_match expectw_match expect_le expect_ge
+fail skip need metric shells shtop myfzf nlines`. `attachf` gives a client
+whose terminal input is a fifo (`term NAME '\033[O'` for focus events, keys to
+popups); `popwin` makes pickers open in a tmux window (`pcap`/`pkeys`) instead
+of a popup.
+
+No fixed sleeps: the helpers that type or send (`send keys term esc pkeys`)
+return once kak has handled it and run the idle hooks it set off (`idle`: a
+`kak -p` round trip through the client, then another past the 50 ms idle
+timeout); `start` once client0 is up and its screen still; `cap`/`pcap` give
+the screen once it stops changing (`settle`). What happens later, in the
+background (kak-lsp, git, a popup closing, a split's client attaching), the
+test waits on by what it checks next: `expectw LABEL WANT CMD...` (expect,
+polling CMD until it prints WANT), `waitout`, `waitcap`, `waitdiags`, `panes`;
+pickers: `fzfready [QUERY]` (every fzf listens on `$R/o/fzf.sock`: up, its
+list read, QUERY searched) and `pickerdone` (the popup gone, what it sent kak
+handled). A `sleep` left in a test is for time that has to pass (an idle
+timer, a debounce), and says so.
 
 ## Known flakes and quirks
 
 - rg's result order and clangd's order of references vary: tests sort those
   lines or pick a query with one match.
-- Timing: tests sleep for kak's idle hooks (50 ms) and clangd. Under load
-  (`-j` above ~4, or a busy machine) some miss; rerun serially before
-  believing a failure. Perf and visual tests are only meaningful serially.
+- Timing: tests wait on what they check next rather than sleep, so load
+  slows them rather than failing them; perf and visual tests (and those
+  tagged `serial`) are only meaningful alone.
 - `rename-edges`/`rename-failed` wait 20 s for the rename timer (`slow`).
 - `palette` fails about one run in four: the capture can land before the
   picker's columns are relaid out for what's on screen. Rerun it alone.

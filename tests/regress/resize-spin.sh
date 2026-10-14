@@ -14,28 +14,28 @@ P=$R/p/sp; mkdir -p "$P"; printf -- '-Wall\n' > "$P/compile_flags.txt"
 	for i in $(seq 1 30); do printf '\tint v%d = unknown_%d(%d); /* a comment that makes the line long enough to wrap in a narrow window, really */\n' $i $i $i; done
 	echo '}'
 } > "$P/s.c"
-CWD=$P XW=70 XH=24 WAIT=1 start tmux sp s.c
-waitdiags sp 10; sleep 1
+CWD=$P XW=70 XH=24 start tmux sp s.c
+waitdiags sp 10; idle sp
 pid=$(kakpid sp)
-# cpu LABEL: % of one cpu over 2 s; fails over 20
+# cpu LABEL: % of one cpu over 2 s (time for a spin to show); fails over 20
 cpu() {
 	a=$(cputicks "$pid") || { fail "$1: kak died"; return; }; sleep 2; b=$(cputicks "$pid") || { fail "$1: kak died"; return; }
 	expect_le "$1: cpu %" $(( (b - a) / 2 )) 20
 }
 cpu idle
-send sp 'execute-keys 4g'; keys sp j; keys sp k; sleep 1
+send sp 'execute-keys 4g'; keys sp j; keys sp k
 cpu "on long line 4"
 for w in 60 40 30 25 20 15 12 10 8 70 100 70; do
-	tm sp resize-window -t main -x $w; sleep 0.8
+	tm sp resize-window -t main -x $w; cap sp > /dev/null
 	cpu "width $w"
 done
 for h in 10 6 4 3 24; do
-	tm sp resize-window -t main -y $h; sleep 0.8
+	tm sp resize-window -t main -y $h; cap sp > /dev/null
 	cpu "height $h"
 done
-tm sp resize-window -t main -x 30 -y 8; sleep 0.5
-for l in 4 5 6 7 8 9 4 5; do send sp "execute-keys ${l}g"; keys sp l; sleep 0.3; done
+tm sp resize-window -t main -x 30 -y 8; cap sp > /dev/null
+for l in 4 5 6 7 8 9 4 5; do send sp "execute-keys ${l}g"; keys sp l; done
 cpu "moving, 30x8"
-keys sp i x y z Escape; sleep 1
+keys sp i x y z Escape
 cpu "after insert, 30x8"
 expect "debug" "$(dbge sp)" ""

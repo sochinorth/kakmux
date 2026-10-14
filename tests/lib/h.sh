@@ -53,6 +53,8 @@ cat > "$R/gitconfig" <<EOF
 EOF
 export PATH="$R/bin:$PATH"
 export KM_SHLOG=$R/o/shcount KM_SHTIME=$R/o/shtime
+# every fzf (a picker's) answers on this socket, for fzfready (one at a time)
+export FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:+$FZF_DEFAULT_OPTS }--listen=$R/o/fzf.sock"
 
 # --- the config dir ---------------------------------------------------------------
 # $XDG_CONFIG_HOME mirrors the real ~/.config (broot, ...) with symlinks,
@@ -138,6 +140,24 @@ expect_ge() {
 	if [ "${2:-x}" -ge "$3" ] 2>/dev/null; then echo "ok   $1 ($2 >= $3)"
 	else echo "FAIL $1: $2, min $3"; : > "$R/failed"; fi
 }
+# expectw LABEL WANT CMD... / expectw_match LABEL PATTERN CMD...: expect /
+# expect_match on CMD's output, once it is that (polled, ${EW:-10} s max):
+# for what settles after the keys (a popup closing, kak-lsp answering)
+expectw() {
+	_el=$1 _ew=$2; shift 2
+	waitfor "${EW:-10}" _outis "$_ew" "$@"
+	expect "$_el" "$("$@")" "$_ew"
+}
+expectw_match() {
+	_el=$1 _ew=$2; shift 2
+	waitfor "${EW:-10}" _outlike "$_ew" "$@"
+	expect_match "$_el" "$("$@")" "$_ew"
+}
+# waitout SECS WANT CMD...: until CMD prints WANT
+waitout() { _wo=$2; _wos=$1; shift 2; waitfor "$_wos" _outis "$_wo" "$@"; }
+_outis() { _ow=$1; shift; [ "$("$@")" = "$_ow" ]; }
+# shellcheck disable=SC2254
+_outlike() { _ow=$1; shift; case $("$@") in $_ow) return 0 ;; esac; return 1; }
 fail() { echo "FAIL $*"; : > "$R/failed"; }
 # skip REASON: the test can't run here (missing tool); not a failure
 skip() { echo "SKIP $*"; : > "$R/skipped"; exit 0; }
@@ -148,9 +168,10 @@ need() { for t; do command -v "$t" >/dev/null 2>&1 || skip "needs $t"; done; }
 # is the pane's process (exec), as with kakmux: when it ends, so does the pane.
 #   kakmux: socket .../kakmux-$PFX-NAME with kakmux.conf (kakmux detection)
 #   tmux:   plain tmux; notmux: kak in a tmux pane, TMUX unset
-# CWD: kak's cwd (default $R); WAIT: seconds after its socket shows (1.5);
-# SHW=1: counting KAKOUNE_POSIX_SHELL; KAKPRE: before kak (env ...);
-# XW/XH: size (160x45)
+# Returns once client0 answers, its first idle hooks have run and its screen
+# is still. CWD: kak's cwd (default $R); WAIT=SECS: just that long after the
+# socket shows instead (WAIT=0: the first frames); SHW=1: counting
+# KAKOUNE_POSIX_SHELL; KAKPRE: before kak (env ...); XW/XH: size (160x45)
 start() {
 	mode=$1 name=$2; shift 2
 	case $mode in
@@ -162,16 +183,53 @@ start() {
 	rm -f "$XDG_RUNTIME_DIR/kakoune/$PFX-$name"
 	TMUX= tmux -S "$sock" -f "$conf" new-session -d -s main -x "${XW:-160}" -y "${XH:-45}" -- \
 		sh -c "cd '${CWD:-$R}' && exec env ${nt:+-u TMUX -u TMUX_PANE} ${SHW:+KAKOUNE_POSIX_SHELL=$KM_LIB/shwrap} ${KAKPRE:-} kak -s $PFX-$name $*"
-	waitkak "$name"
-	sleep "${WAIT:-1.5}"
+	waitkak "$name" || return 1
+	if [ -n "${WAIT:-}" ]; then sleep "$WAIT"; return 0; fi
+	_sc=0
+	until hasclient "$name" client0; do
+		_sc=$((_sc + 1)); [ $_sc -gt 200 ] && { echo "session $name: no client0" >&2; return 1; }
+		sleep 0.05
+	done
+	idle "$name"; cap "$name" > /dev/null
+}
+# hasclient NAME CLIENT: the session has that client
+hasclient() {
+	rm -f "$R/o/hc" "$R/o/hc.done"
+	printf 'try %%{ evaluate-commands -client %s %%{ echo -to-file %s ok } }; echo -to-file %s.done ok\n' "$2" "$R/o/hc" "$R/o/hc" | kak -p "$PFX-$1" 2>/dev/null &&
+	waitfile "$R/o/hc.done" 1 && [ -e "$R/o/hc" ]
 }
 # waitkak NAME: until the session answers (10 s max)
 waitkak() {
-	k=0
+	_wk=0
 	until printf 'nop\n' | kak -p "$PFX-$1" 2>/dev/null; do
-		k=$((k + 1)); [ $k -gt 100 ] && { echo "session $1 did not start" >&2; return 1; }
-		sleep 0.1
+		_wk=$((_wk + 1)); [ $_wk -gt 200 ] && { echo "session $1 did not start" >&2; return 1; }
+		sleep 0.05
 	done
+}
+# sync NAME: until kak has handled all that was sent to it so far: a round
+# trip through client $CL (default client0; the session's context if there's
+# no such client). What kak -p sends runs in order, and keys typed through
+# tmux reach the server well before a kak -p started after them. At once if
+# the session is gone.
+sync() {
+	rm -f "$R/o/sync"
+	printf 'try %%{ evaluate-commands -client %s %%{ echo -to-file %s ok } } catch %%{ echo -to-file %s ok }\n' \
+		"${CL:-client0}" "$R/o/sync" "$R/o/sync" | kak -p "$PFX-$1" 2>/dev/null || return 1
+	waitfile "$R/o/sync"
+}
+# idle NAME: sync, then again past kak's idle timeout (50 ms): the idle hooks
+# what was typed or sent set off have run (not what they started in the background)
+idle() { sync "$1" && sleep 0.07 && sync "$1"; }
+# settle CMD...: until CMD's output (a screen) stays the same for 30 ms (5 s
+# max); prints it
+settle() {
+	_sa=$("$@"); _sk=0
+	while [ $_sk -lt 160 ]; do
+		sleep 0.03; _sb=$("$@")
+		[ "$_sa" = "$_sb" ] && break
+		_sa=$_sb; _sk=$((_sk + 1))
+	done
+	printf '%s\n' "$_sa"
 }
 # sk NAME: tmux socket of a server started by start
 sk() { for s in "$R/s/kakmux-$PFX-$1" "$R/s/$PFX-tmux-$1"; do [ -S "$s" ] && echo "$s" && return; done; }
@@ -180,7 +238,15 @@ tm() { n=$1; shift; TMUX= tmux -S "$(sk "$n")" "$@"; }
 attach() {
 	s=$(sk "$1")
 	script -qfc "stty rows ${XH:-45} cols ${XW:-160}; TMUX= tmux -S '$s' attach -t main" /dev/null >/dev/null 2>&1 </dev/null &
-	echo $! >> "$R/pids"; sleep 1
+	echo $! >> "$R/pids"; attached "$1"
+}
+# attached NAME: until a tmux client is attached, and kak has heard of it
+attached() {
+	_ak=0; until [ -n "$(tm "$1" list-clients -F x 2>/dev/null)" ]; do
+		_ak=$((_ak + 1)); [ $_ak -gt 200 ] && { echo "$1: no tmux client attached" >&2; return 1; }
+		sleep 0.05
+	done
+	idle "$1"; cap "$1" > /dev/null
 }
 # attachf NAME: attached client reading its terminal input from the fifo
 # $R/o/in-NAME (term NAME BYTES writes there: keys, focus events)
@@ -191,30 +257,30 @@ attachf() {
 	sleep 100000 > "$fifo" &
 	echo $! >> "$R/pids"
 	script -qfc "stty rows ${XH:-45} cols ${XW:-160}; TMUX= tmux -S '$s' attach -t main" /dev/null >/dev/null 2>&1 < "$fifo" &
-	echo $! >> "$R/pids"; sleep 1
+	echo $! >> "$R/pids"; attached "$1"
 }
-term() { printf "$2" > "$R/o/in-$1"; sleep "${WAIT2:-0.6}"; }
+# The helpers that type or send (term send keys pkeys esc) return once it's
+# handled (see sync, idle, settle); WAIT2=SECS: that much longer each.
+term() { printf "$2" > "$R/o/in-$1"; idle "$1"; [ -z "${WAIT2:-}" ] || sleep "$WAIT2"; }
 # send NAME CMDS: run in client0 (or $CL)
-send() { printf 'evaluate-commands -client %s %%{ %s }\n' "${CL:-client0}" "$2" | kak -p "$PFX-$1"; sleep "${WAIT2:-0.4}"; }
+send() { printf 'evaluate-commands -client %s %%{ %s }\n' "${CL:-client0}" "$2" | kak -p "$PFX-$1"; idle "$1"; [ -z "${WAIT2:-}" ] || sleep "$WAIT2"; }
 # q NAME EXPR...: EXPR evaluated in the client, shell-quoted
 q() {
-	n=$1; shift; rm -f "$R/o/q"
-	printf 'evaluate-commands -client %s %%{ echo -quoting shell -to-file %s -- %s }\n' "${CL:-client0}" "$R/o/q" "$*" | kak -p "$PFX-$n"
-	waitfile "$R/o/q"; cat "$R/o/q" 2>/dev/null; echo
+	n=$1; shift; rm -f "$R/o/q" "$R/o/q.done"
+	printf 'evaluate-commands -client %s %%{ echo -quoting shell -to-file %s -- %s; echo -to-file %s.done ok }\n' "${CL:-client0}" "$R/o/q" "$*" "$R/o/q" | kak -p "$PFX-$n" && waitfile "$R/o/q.done"; cat "$R/o/q" 2>/dev/null; echo
 }
 # qv NAME EXPR...: as q, no trailing newline, raw (echo -to-file)
 qv() {
-	n=$1; shift; rm -f "$R/o/q"
-	printf 'evaluate-commands -client %s %%{ echo -to-file %s -- %s }\n' "${CL:-client0}" "$R/o/q" "$*" | kak -p "$PFX-$n"
-	waitfile "$R/o/q"; cat "$R/o/q" 2>/dev/null
+	n=$1; shift; rm -f "$R/o/q" "$R/o/q.done"
+	printf 'evaluate-commands -client %s %%{ echo -to-file %s -- %s; echo -to-file %s.done ok }\n' "${CL:-client0}" "$R/o/q" "$*" "$R/o/q" | kak -p "$PFX-$n" && waitfile "$R/o/q.done"; cat "$R/o/q" 2>/dev/null
 }
-waitfile() { k=0; while [ ! -e "$1" ] && [ $k -lt 30 ]; do sleep 0.1; k=$((k + 1)); done; sleep 0.05; }
+# waitfile FILE [SECS]: until FILE exists (5 s max)
+waitfile() { _fk=0; while [ ! -e "$1" ]; do _fk=$((_fk + 1)); [ $_fk -gt $((${2:-5} * 50)) ] && return 1; sleep 0.02; done; }
 # dbg NAME: *debug* contents; dbge NAME: less the usual noise (startup
 # lines, faces, remote client chatter, empty lines)
 dbg() {
-	rm -f "$R/o/d"
-	printf 'evaluate-commands -client %s %%{ evaluate-commands -buffer *debug* %%{ execute-keys \047%%\047; echo -to-file %s %%val{selection} } }\n' "${CL:-client0}" "$R/o/d" | kak -p "$PFX-$1"
-	waitfile "$R/o/d"; cat "$R/o/d"; echo
+	rm -f "$R/o/d" "$R/o/d.done"
+	printf 'evaluate-commands -client %s %%{ evaluate-commands -buffer *debug* %%{ execute-keys \047%%\047; echo -to-file %s %%val{selection} }; echo -to-file %s.done ok }\n' "${CL:-client0}" "$R/o/d" "$R/o/d" | kak -p "$PFX-$1" && waitfile "$R/o/d.done"; cat "$R/o/d"; echo
 }
 dbge() {
 	dbg "$1" | grep -v -e '^ \* ' -e '^\*\*\* This is the debug buffer' -e '^Faces:$' -e '^Mappings:$' \
@@ -223,8 +289,9 @@ dbge() {
 		-e '^accepting connection failed' -e '^ *$'
 	return 0
 }
-keys() { n=$1; shift; tm "$n" send-keys -t main "$@"; sleep "${WAIT2:-0.4}"; }
-cap() { tm "$1" capture-pane -p -t "${2:-main}"; }
+keys() { n=$1; shift; tm "$n" send-keys -t main "$@"; idle "$n"; [ -z "${WAIT2:-}" ] || sleep "$WAIT2"; }
+# cap NAME [PANE]: the screen, once still
+cap() { settle tm "$1" capture-pane -p -t "${2:-main}"; }
 # stop NAME: the session, its tmux server, its kak-lsp (and language servers)
 stop() {
 	kp=$(kakpid "$1")
@@ -256,26 +323,33 @@ popwin() {
 	grep -q 'new-window -d -n picker' "$R/popwin.kak" || fail "popwin: picker-open no longer matches the rewrite"
 	send "$1" "source $R/popwin.kak"
 }
-pcap() { tm "$1" capture-pane -p -t main:picker 2>/dev/null; }
-pkeys() { n=$1; shift; tm "$n" send-keys -t main:picker "$@"; sleep "${WAIT2:-0.4}"; }
+pcap() { settle tm "$1" capture-pane -p -t main:picker 2>/dev/null; }
+pkeys() { n=$1; shift; tm "$n" send-keys -t main:picker "$@"; pcap "$n" > /dev/null; [ -z "${WAIT2:-}" ] || sleep "$WAIT2"; }
 # kakpid NAME: the session's kak server pid
 kakpid() { pgrep -f "^kak -s $PFX-$1( |\$)" | head -1; }
 # cpu PID: utime+stime ticks
 cputicks() { sed 's/.*) //' "/proc/$1/stat" | awk '{ print $12 + $13 }'; }
-# waitfor TIMEOUT CMD...: until CMD succeeds (polls every 0.2 s)
+# waitfor TIMEOUT CMD...: until CMD succeeds (polls every 0.05 s)
 waitfor() {
-	t=$1; shift; k=0
-	until "$@"; do k=$((k + 1)); [ $k -gt $((t * 5)) ] && return 1; sleep 0.2; done
+	_wt=$1; shift; _wn=0
+	until "$@"; do _wn=$((_wn + 1)); [ $_wn -gt $((_wt * 20)) ] && return 1; sleep 0.05; done
 }
+# panes NAME N: until window main has N panes, each with a kak client in it
+panes() { waitfor 10 _panes "$1" "$2"; idle "$1"; }
+_panes() { [ "$(tm "$1" list-panes -t main -F '#{@kak_client}' 2>/dev/null | grep -c .)" = "$2" ] && [ "$(tm "$1" list-panes -t main -F x | grep -c .)" = "$2" ]; }
+# waitcap NAME PATTERN [SECS] [PANE]: until the screen has a line matching
+# PATTERN (grep -E; 10 s max)
+waitcap() { waitfor "${3:-10}" _capgrep "$1" "$2" "${4:-main}"; }
+_capgrep() { tm "$1" capture-pane -p -t "$3" 2>/dev/null | grep -qE -- "$2"; }
 # waitdiags NAME [N]: until the buffer has diagnostics (lsp_diagnostic_error_count
 # + warnings >= N, default 1; 20 s max)
 waitdiags() {
-	k=0
+	_dk=0
 	while :; do
-		n=$(qv "$1" '%sh{ echo $((kak_opt_lsp_diagnostic_error_count + kak_opt_lsp_diagnostic_warning_count)) }')
-		[ "${n:-0}" -ge "${2:-1}" ] 2>/dev/null && return 0
-		k=$((k + 1)); [ $k -gt 100 ] && return 1
-		sleep 0.2
+		_dn=$(qv "$1" '%sh{ echo $((kak_opt_lsp_diagnostic_error_count + kak_opt_lsp_diagnostic_warning_count)) }')
+		[ "${_dn:-0}" -ge "${2:-1}" ] 2>/dev/null && return 0
+		_dk=$((_dk + 1)); [ $_dk -gt 200 ] && return 1
+		sleep 0.1
 	done
 }
 
@@ -290,6 +364,21 @@ shells() { nlines "$KM_SHLOG"; }
 shtop() { sort "$KM_SHLOG" | cut -c1-"${W:-100}" | uniq -c | sort -rn | head -"${1:-6}"; }
 # myfzf: pid of an fzf of this run (a picker popup's), if any
 myfzf() { for p in $(pgrep -x fzf); do grep -qzx "KM_RUN_ID=$KM_RUN_ID" "/proc/$p/environ" 2>/dev/null && { echo "$p"; return; }; done; }
+# fzfst [JQ]: the picker's fzf's state (its GET /, through jq), if one is up
+fzfst() { curl -s -m 2 --unix-socket "$R/o/fzf.sock" 'http://localhost/?limit=0' 2>/dev/null | jq -r "${1:-.}" 2>/dev/null; }
+# fzfready [QUERY]: until a picker's fzf is up, its list read and searched,
+# with QUERY typed (default none; 10 s max)
+fzfready() { waitfor 10 _fzfis "${1-}" || echo "fzfready: fzf not ready (${1-}): $(fzfst '"\(.reading) \(.progress) \(.query)"')" >&2; }
+_fzfis() { [ "$(fzfst '"\(.reading) \(.progress) \(.query)"')" = "false 100 $1" ]; }
+# pickerdone NAME: until no picker popup of the run is left (its last
+# command sent to kak), then idle NAME
+pickerdone() { waitfor 10 _nopicker; idle "$1"; }
+_nopicker() {
+	for _pp in $(pgrep -f 'bin/kak-picker '); do
+		grep -qzx "KM_RUN_ID=$KM_RUN_ID" "/proc/$_pp/environ" 2>/dev/null && return 1
+	done
+	return 0
+}
 # alive NAME: the session answers within 5 s
 alive() {
 	rm -f "$R/o/alive"
@@ -299,4 +388,4 @@ alive() {
 }
 # esc NAME: <esc> to kak (send-keys: a raw \033 written to an attachf
 # client's terminal reaches kak as the prefix of the next key, <a-u> say)
-esc() { tm "$1" send-keys -t main Escape; sleep "${WAIT2:-0.6}"; }
+esc() { tm "$1" send-keys -t main Escape; idle "$1"; [ -z "${WAIT2:-}" ] || sleep "$WAIT2"; }
