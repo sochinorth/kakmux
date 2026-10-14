@@ -405,9 +405,9 @@ case $1 in
             # list laid out again (fzf's action printed) if the rows on screen
             # call for other widths than DIR/cols's (fields: widths, scroll
             # offset, the query, place and size the widths tried were for,
-            # those widths, the shown.N last written, the last list's number).
-            # Lists from a search (grep, workspace symbols) only once DIR/rows
-            # is the one for the query.
+            # those widths, the shown.N last written, the last list's number,
+            # r while its reload is still to come). Lists from a search (grep,
+            # workspace symbols) only once DIR/rows is the one for the query.
 	LC_ALL=C exec awk -v dir="$2" -v SIDES="$3" -v FRAC="$4" -v matched="$5" "$columns"'
 	# The rows on screen are from the scroll offset, which fzf does not
 	# tell: as fzf does, by as little from where it was as keeps the cursor
@@ -438,7 +438,10 @@ case $1 in
 		# reload still to come, and its own events with it): nothing, no
 		# relayout from rows that are not what will be on screen
 		if (lgen >= 0 && lgen < gen) exit
+		# (the reload of a relayout still to come until its list is seen: see
+		# --pending)
 		if (lgen > gen) gen = lgen
+		if (lgen < 0) made = S[7]
 		# Matching is against the cells laid out, cut or not: other widths
 		# can match other rows, which call for other widths again. Against
 		# flip-flopping, the widths a query (at this cursor place and size)
@@ -459,12 +462,23 @@ case $1 in
 				}
 				close(out)
 				print "reload-sync:cat \047" out "\047"
-				w = nw; tried = tried nw "/"
+				w = nw; tried = tried nw "/"; made = "r"
 			}
 		}
-		printf "%s\t%d\t%s\t%s\t%d\t%d\n", w, off, key, tried, alt, gen > state
+		printf "%s\t%d\t%s\t%s\t%d\t%d\t%s\n", w, off, key, tried, alt, gen, made > state
 	}'
 	;;
+--pending)  # DIR: on a change of the query, the reload of the list --layout
+            # last laid out again, if it is still to come. fzf drops a reload
+            # asked for by a transform when the next search (a key typed)
+            # comes before it starts, and then says it is reading, for good,
+            # and keeps the list it has; asked for with that search, the
+            # reload goes with it. (Asked for again while it runs, fzf starts
+            # it over, the same list.)
+	LC_ALL=C exec awk -v dir="$2" 'BEGIN {
+		if ((getline l < (dir "/cols")) > 0 && split(l, S, "\t") >= 7 && S[7] == "r")
+			print "reload-sync:cat \047" dir "/shown." (S[5] + 0) "\047"
+	}' ;;
 --legend)   # ROWS: draw $PICKER_LEGEND on the popup's last row
 	printf '\0337\033[%d;1H%s\033[K\033[0m\0338' "$2" "$PICKER_LEGEND" >/dev/tty
 	exit ;;
@@ -784,6 +798,8 @@ if [ -n "$relayout" ]; then
 	export PICKER_H PICKER_AVAIL PICKER_DIR
 	set -- "$@" --no-hscroll \
 		--bind "result,focus,resize:transform:'$self' --layout '${dir:?}' $relayout {*f}"
+	# (grep and workspace symbols: a change of the query reloads anyway)
+	case $kind in grep|workspace-symbols) ;; *) set -- "$@" --bind "change:transform:'$self' --pending '${dir:?}'" ;; esac
 fi
 
 # ESCDELAY: how long fzf waits after an Escape for the rest of a key sequence
