@@ -57,3 +57,7 @@ server bugs (duplicate answers, column-0 node ends, sessions stuck as tracked),
 fixed in a patched build, 3.2.2-3 (`tests/kts` checks for them); with it, its
 rc removes Kakoune's `window/<lang>` highlighter itself, so the stock c-family
 hook's own removal logs an error in `*debug*` when a buffer's filetype changes.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
