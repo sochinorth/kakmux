@@ -18,3 +18,8 @@ ok   refused
 == kakbr: sidebar focused
 ok   outer sidebar pane focused
 ok   no explorer in the kakmux
+== kakbr: sidebar quit (floated), <space>e opens a new one
+ok   new sidebar left of kak, focused, 40 columns
+ok   marked the sidebar, recorded
+ok   docked
+ok   kakbr-sidebar, in the workspace root

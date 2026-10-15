@@ -38,14 +38,28 @@ keys ex3 Space e
 expectw_match "refused" "explorer: needs tmux (:kakmux, kakbr)*" LAST
 stop ex3
 echo "== kakbr: sidebar focused"
-S1=$R/s/$PFX-kakbr-1; echo kb1 >> "$R/sessions"
-TMUX= tmux -S "$S1" -f /dev/null new-session -d -s kb -x 160 -y 40 -- sleep 1000
-TMUX= tmux -S "$S1" split-window -h -t kb -- sleep 1000
-TMUX= tmux -S "$S1" set-option -w -t kb @kakbr_side %0; TMUX= tmux -S "$S1" select-pane -t %1
+# the session's name is the sidebar broot's server's (/tmp, shared): this run's
+S1=$R/s/$PFX-kakbr-1 KB=$PFX-kb; echo kb1 >> "$R/sessions"
+t1() { TMUX= tmux -S "$S1" "$@"; }
+t1 -f /dev/null new-session -d -s "$KB" -x 160 -y 40 -- sleep 1000
+t1 split-window -h -t "$KB" -- sleep 1000
+t1 set-option -w -t "$KB" @kakbr_side %0; t1 select-pane -t %1
 CWD=$P start kakmux ex4 main.c
 tm ex4 set-option -t main @outer_pane "$S1 %1"
 keys ex4 Space e
-OP() { TMUX= tmux -S "$S1" list-panes -t kb -F '#{pane_id} #{pane_active}' | tr '\n' ' '; }
+OP() { t1 list-panes -t "$KB" -F '#{pane_id} #{pane_active}' | tr '\n' ' '; }
 expectw "outer sidebar pane focused" "%0 1 %1 0 " OP
 expect "no explorer in the kakmux" "$(tm ex4 list-panes -t main -F '#{pane_id}')" "%0"
-TMUX= tmux -S "$S1" kill-server
+echo "== kakbr: sidebar quit (floated), <space>e opens a new one"
+t1 set-option -w -t "$KB" @kakbr_float 1
+t1 kill-pane -t %0; t1 select-pane -t %1
+keys ex4 Space e
+expectw "new sidebar left of kak, focused, 40 columns" "%2 1 40 %1 0 119 " eval \
+	"t1 list-panes -t '$KB' -F '#{pane_id} #{pane_active} #{pane_width}' | tr '\\n' ' '"
+expect "marked the sidebar, recorded" "$(t1 display-message -p -t %2 '#{@kakbr_sidebar} #{@kakbr_side}')" "1 %2"
+expect "docked" "$(t1 show-options -wqv -t "$KB" @kakbr_float)" ""
+expect_match "kakbr-sidebar, in the workspace root" \
+	"$(t1 display-message -p -t %2 '#{pane_start_command}|#{pane_start_path}')" "*kakbr-sidebar*|$P"
+drawn() { t1 capture-pane -p -t %2 | grep -q '? for help'; }
+waitfor 15 drawn || fail "broot not drawn"
+t1 kill-server

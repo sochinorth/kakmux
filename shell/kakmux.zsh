@@ -24,6 +24,8 @@ kak() {
 # kak's splits and bufferline stay in the kak half. Files opened from broot go
 # to kak (broot-open); <c-w> l/h move between the two. It lasts as long as kak:
 # quitting kak (:qa, :q in its last split, or <c-w> q in broot) closes it all.
+# broot's :q closes the sidebar alone, as kak's :q a split; <space>e in kak
+# opens it again (explorer, rc/pickers.kak).
 #   file        → kak opens it and gets focus; broot opens in $PWD if the
 #                 file is under it, otherwise in the file's own directory
 #   dir/nothing → broot in that dir (default $PWD) with focus, empty kak

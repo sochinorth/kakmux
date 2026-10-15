@@ -354,7 +354,8 @@ map global normal <s-ret> ': jump-labels -extend<ret>' -docstring 'extend to a w
 
 # --- explorer (<space>e, <space>E) ------------------------------------------------
 # Helix's file explorer, as broot beside kak: in kakbr, its sidebar gets the
-# focus (found out from the kakmux, as split-focus goes, by @outer_pane);
+# focus (found out from the kakmux, as split-focus goes, by @outer_pane), or
+# once quit (broot's :q), a new one opens in its place, as below for the dir;
 # elsewhere in tmux, broot opens in a split to the left, 25% of the window
 # within 24..40 columns as kakbr's, at the buffer's workspace root (<space>e)
 # or its file's directory (<space>E), or if one is open in this window
@@ -362,7 +363,7 @@ map global normal <s-ret> ': jump-labels -extend<ret>' -docstring 'extend to a w
 # double-click through the opener dir put first on its PATH) finds the kak
 # pane beside it. broot reads kakbr's broot.hjson (git on) when there is one.
 # Under kakmux the split is weighted like the others (bin/kakmux-even).
-define-command -override explorer -params ..1 -docstring "explorer [-buffer-dir]: broot beside kak at the workspace root (or the buffer's directory); in kakbr, its sidebar" %{
+define-command -override explorer -params ..1 -docstring "explorer [-buffer-dir]: broot beside kak at the workspace root (or the buffer's directory); in kakbr, its sidebar (again, once quit)" %{
 	evaluate-commands %sh{
 		if [ -z "$kak_client_env_TMUX" ] || [ -z "$kak_client_env_TMUX_PANE" ]; then
 			echo "fail 'explorer: needs tmux (:kakmux, kakbr)'"; exit
@@ -374,7 +375,30 @@ define-command -override explorer -params ..1 -docstring "explorer [-buffer-dir]
 			s=${outer%% *} p=${outer#* }
 			side=$(tmux -S "$s" show-options -wqv -t "$p" @kakbr_side 2>/dev/null)
 			if [ -n "$side" ]; then
-				tmux -S "$s" select-pane -t "$side" >/dev/null 2>&1; exit
+				tmux -S "$s" select-pane -t "$side" >/dev/null 2>&1 && exit
+				# gone (broot's :q): a new one in its place, as kakbr
+				# starts it, in the workspace root (or the buffer's dir)
+				dir=${kak_opt_workspace_root:-$PWD}
+				if [ "$1" = -buffer-dir ]; then
+					case $kak_buffile in /*) dir=${kak_buffile%/*} ;; esac
+				fi
+				sb=$(command -v kakbr-sidebar) || sb=$HOME/.local/bin/kakbr-sidebar
+				set -- $(tmux -S "$s" display-message -p -t "$p" '#{session_name} #{window_width} #{E:@kakbr_width}') || exit
+				w=$3
+				if [ -z "$w" ]; then
+					w=$(($2 / 4)); [ "$w" -lt 24 ] && w=24; [ "$w" -gt 40 ] && w=40
+				fi
+				# floated when it quit: docked now
+				tmux -S "$s" set-option -wu -t "$p" @kakbr_float >/dev/null 2>&1
+				id=$(tmux -S "$s" split-window -h -b -l "$w" -t "$p" -c "$dir" -P -F '#{pane_id}' -- \
+					env KAKBR_SESSION="$1" "$sb" 2>/dev/null) || {
+					echo "fail 'explorer: tmux split-window failed'"; exit
+				}
+				# kakbr-sidebar sets @kakbr_side too, once it runs: a second
+				# <space>e before then focuses this one
+				tmux -S "$s" set-option -p -t "$id" @kakbr_sidebar 1 \; \
+					set-option -w -t "$id" @kakbr_side "$id" >/dev/null 2>&1
+				exit
 			fi
 		done
 		ex=$(t list-panes -t "$pane" -F '#{pane_id} #{@kak_explorer}' 2>/dev/null | awk '$2 == 1 { print $1; exit }')
