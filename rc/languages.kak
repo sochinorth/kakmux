@@ -50,9 +50,12 @@ hook -group kakrc global BufSetOption filetype=.* indent-lang
 # At open (one shell): .editorconfig, else the file's own indentation. The
 # detection is Helix's in short: lines indented with tabs against lines
 # with spaces, and for spaces, the most common step up from one indented
-# line to the next (1 to 8; on a tie the smaller). The editorconfig tool is
-# looked for once a session (editorconfig_tool: none, or the command; under
-# WSL $PATH goes through Windows' directories, slow to look in).
+# line to the next (1 to 8; on a tie the smaller). Not indentation, left
+# out: block comments' " * " lines, and lines inside parentheses left open
+# above (aligned arguments: counted till a blank line; not in Lisps, all
+# parentheses). The editorconfig tool is looked for once a session
+# (editorconfig_tool: none, or the command; under WSL $PATH goes through
+# Windows' directories, slow to look in).
 declare-option -hidden str editorconfig_tool
 define-command -override -hidden indent-detect %{
 	evaluate-commands %sh{
@@ -76,10 +79,18 @@ define-command -override -hidden indent-detect %{
 			esac
 		fi
 		[ -z "$w" ] && [ -r "$kak_buffile" ] || exit
-		awk '
+		case $kak_buffile in
+			*.el|*.lisp|*.lsp|*.cl|*.scm|*.ss|*.rkt|*.clj|*.cljs|*.cljc|*.edn|*.fnl|*.janet) parens=0 ;;
+			*) parens=1 ;;
+		esac
+		awk -v parens="$parens" '
 			NR > 1000 { exit }
-			/^[ \t]*$/ { next }
+			/^[ \t]*$/ { depth = 0; next }
+			/^[ \t]*\*/ { next }
 			{
+				cont = parens && depth > 0
+				depth += gsub(/\(/, "(") - gsub(/\)/, ")"); if (depth < 0) depth = 0
+				if (cont) next
 				match($0, /^[ \t]*/); ws = substr($0, 1, RLENGTH)
 				if (ws ~ /^\t/) { tabs++; prev = -1; next }
 				if (ws ~ /\t/) { prev = -1; next }
