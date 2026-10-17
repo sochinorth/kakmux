@@ -210,20 +210,25 @@ map global user R ':clipboard-paste R<ret>'    -docstring 'replace selections wi
 # Kakoune has no select mode: the extending form of a motion is its shift
 # variant, so [keys.select] folds into these. Helix's move_prev_word_end has no
 # Kakoune motion; C-left goes to the previous word start (b) instead.
+# C-S-left/C-S-right extend by a word, as S-left/S-right by a character.
 
-map global normal <c-right> w
-map global normal <c-left>  b
-map global normal <s-right> L
-map global normal <s-left>  H
+map global normal <c-right>   w
+map global normal <c-left>    b
+map global normal <s-right>   L
+map global normal <s-left>    H
+map global normal <c-s-right> W
+map global normal <c-s-left>  B
 
 # Insert mode: <a-;> runs one normal-mode command. What's typed in insert
 # mode never replaces the selection (after i it goes in before it, after a
 # after it, and c has deleted it already), so S-left/S-right only matter
 # once you leave insert mode.
-map global insert <c-right> '<a-;>w<a-;>l'
-map global insert <c-left>  '<a-;>b<a-;>;'
-map global insert <s-right> '<a-;>L'
-map global insert <s-left>  '<a-;>H'
+map global insert <c-right>   '<a-;>w<a-;>l'
+map global insert <c-left>    '<a-;>b<a-;>;'
+map global insert <s-right>   '<a-;>L'
+map global insert <s-left>    '<a-;>H'
+map global insert <c-s-right> '<a-;>W'
+map global insert <c-s-left>  '<a-;>B'
 
 # --- goto mode (g) -------------------------------------------------------------
 # Kakoune's g, with Helix's letters where they differ: gs the first non-blank

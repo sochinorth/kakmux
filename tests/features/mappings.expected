@@ -14,6 +14,8 @@ Mappings:
  * normal m: ':enter<minus>user<minus>mode<space>match<ret>' match mode
  * normal <c-right>: 'w'
  * normal <c-left>: 'b'
+ * normal <c-s-right>: 'W'
+ * normal <c-s-left>: 'B'
  * normal z: ':enter<minus>user<minus>mode<space>zview<ret>' view mode
  * normal Z: ':enter<minus>user<minus>mode<space><minus>lock<space>zview<ret>' view mode (sticky)
  * normal ]: ':enter<minus>user<minus>mode<space>next<ret>' next (Helix ])
@@ -43,6 +45,8 @@ Mappings:
  * insert <c-left>: '<a-semicolon>b<a-semicolon><semicolon>'
  * insert <s-right>: '<a-semicolon>L'
  * insert <s-left>: '<a-semicolon>H'
+ * insert <c-s-right>: '<a-semicolon>W'
+ * insert <c-s-left>: '<a-semicolon>B'
  * insert <c-w>: '<a-semicolon>:insert<minus>delete<space><minus>word<minus>before<ret>'
  * insert <a-backspace>: '<a-semicolon>:insert<minus>delete<space><minus>word<minus>before<ret>'
  * insert <a-d>: '<a-semicolon>:insert<minus>delete<space><minus>word<minus>after<ret>'
